@@ -1,0 +1,50 @@
+//
+//  a.cpp
+//  zerojudge
+//
+//  Created by nnaaaaa on 2022/4/13.
+//
+
+#include <iostream>
+using namespace std;
+void print(int n,int m,int arr[]){
+    if(n==1){
+        for(arr[n]=m;arr[n]>=1;arr[n]--){
+            int check[9]={0};
+            for(int i=m;i>=1;i--){
+                check[arr[i]]++;
+            }
+            if(check[1]>1)
+                continue;
+            if(check[2]>1)
+                continue;
+            if(check[3]>1)
+                continue;
+            if(check[4]>1)
+                continue;
+            if(check[5]>1)
+                continue;
+            if(check[6]>1)
+                continue;
+            if(check[7]>1)
+                continue;
+            if(check[8]>1)
+                continue;
+            for(int i=m;i>=1;i--)
+                cout<<arr[i];
+            cout<<"\n";
+        }
+        return ;
+    }
+    else
+        for(arr[n]=m;arr[n]>=1;arr[n]--)
+            print(n-1,m,arr);
+}
+int main(int argc, const char * argv[]){
+    int n;
+    while(cin>>n){
+        int num[9]={0};
+        print(n,n,num);
+    }
+    return 0;
+}

@@ -1,0 +1,72 @@
+//
+//  a981.cpp
+//  zerojudge
+//
+//  Created by nnaaaaa on 2022/5/3.
+//
+
+#include <iostream>
+using namespace std;
+int jud=0;
+void dfs(const int &n, const int &m, int num[], int location, int &sum, bool check[]);
+int main(int argc, const char * argv[]){
+    int n, m;
+    cin>>n>>m;
+    int * num = new int [n];
+    for(int i = 0; i < n; i++){
+        cin>>num[i];
+        for(int j = i; j > 0; j--){
+            if(num[j] < num[j-1]){
+                int temp;
+                temp = num[j-1];
+                num[j-1] = num[j];
+                num[j] = temp;
+            }
+            else
+                break;
+        }
+    }
+    bool * check = new bool [n];
+    int sum = 0;
+    int start = 0;
+    dfs(n, m, num, start, sum, check);
+    delete [] check;
+    delete [] num;
+    if(jud == 0)
+        cout<<"-1"<<endl;
+    return 0;
+}
+void dfs(const int &n, const int &m, int num[], int location, int &sum, bool check[]){
+    if (location < n){
+        sum += num[location];
+        if (sum < m) {
+            check[location] = 1;
+            dfs(n, m, num, location + 1, sum, check);
+            check[location] = 0;
+            sum -= num[location];
+        }
+        else if (sum > m) {
+            sum -= num[location];
+            return;
+        }
+        else if (sum == m) {
+            jud = 1;
+            check[location] = 1;
+            for (int i = 0; i <= location; i++)
+                if (check[i] == 1)
+                    cout<<num[i]<<" ";
+            cout<<endl;
+            for(int i=location; num[i] == num[i+1]; i++){
+                for (int j=0; j<=location; j++)
+                    if (check[j] == 1)
+                        cout<<num[j]<<" ";
+                cout<<endl;
+            }
+            sum -= num[location];
+            check[location] = 0;
+            return;
+        }
+        dfs(n, m, num, location+1, sum, check);
+    }
+    return;
+}

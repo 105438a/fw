@@ -1,0 +1,26 @@
+from selenium import webdriver   
+import time
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+chromedriver = "/Users/nnaaaaa/Downloads/chromedriver"
+from selenium.webdriver.common.keys import Keys
+driver = webdriver.Chrome(chromedriver)
+driver.maximize_window() 
+driver.get("https://m.momoshop.com.tw/mymomo/login.momo")
+driver.find_element_by_id('memId').send_keys(‘帳號’)
+driver.find_element_by_id('passwd').send_keys(‘密碼’)
+driver.find_element_by_xpath('//*[@id="loginForm"]/dl[1]/dd[1]/a').click()
+driver.get("https://www.momoshop.com.tw/goods/GoodsDetail.jsp?i_code=9435324&str_category_code=2900100474")
+while 1:
+    try:
+        WebDriverWait(driver, 1,0.5).until(EC.presence_of_element_located((By.ID,'buy_yes'))).click()
+        break
+    except:
+        driver.refresh()
+
+WebDriverWait(driver, 5,0.25).until(EC.presence_of_element_located((By.XPATH,'//*[@id="checkoutBar"]/tbody/tr/td[4]/a')))
+driver.find_element_by_xpath('//*[@id="checkoutBar"]/tbody/tr/td[4]/a').click()
+WebDriverWait(driver, 5,0.25).until(EC.presence_of_element_located((By.XPATH,'//*[@id="cardCVV"]')))
+driver.find_element_by_xpath('//*[@id="cardCVV"]').send_keys('846')
+driver.find_element_by_id('orderSave').click()

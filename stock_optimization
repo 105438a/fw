@@ -1,0 +1,150 @@
+import tkinter as tk
+from tkinter import messagebox  # 匯入彈出訊息框功能
+import yfinance as yf  # 匯入 Yahoo Finance 模組
+import numpy as np
+import scipy.optimize as sco
+import os
+import sys
+
+def resource_path(relative_path):
+    """取得資源路徑，用於打包後的執行檔案路徑定位"""
+    base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base_path, relative_path)
+
+def run_gui():
+    """執行 GUI 界面的主函式"""
+    root = tk.Tk()
+    root.title("股票投資組合最佳化")  # 設置主視窗標題
+    root.geometry("800x600")  # 設置主視窗大小
+
+    def get_stock_prices(tickers, period):
+        """從 Yahoo Finance 下載股票價格資料"""
+        try:
+            data = yf.download(tickers, period=period)['Adj Close']
+            data.columns = data.columns.str.upper()  # 確保股票代碼為大寫
+            return data
+        except ValueError as e:
+            messagebox.showerror("錯誤", f"無法獲取股票資料，錯誤訊息： {e}")
+            return None
+        except yf.YFError as e:
+            messagebox.showerror("Yahoo Finance 錯誤", f"Yahoo Finance 錯誤： {e}")
+            return None
+
+    def optimize_portfolio(prices, strategy, investment_amount):
+        """優化投資組合函式"""
+        if prices is None:
+            return None, None, None, None
+
+        returns = prices.pct_change().dropna()  # 計算每日收益率
+        mean_returns = returns.mean()  # 計算平均收益率
+        cov_matrix = returns.cov()  # 計算收益率協方差矩陣
+
+        def portfolio_variance(weights):
+            return np.dot(weights.T, np.dot(cov_matrix, weights))  # 投資組合方差
+
+        def portfolio_return(weights):
+            return np.dot(weights, mean_returns)  # 投資組合收益率
+
+        num_assets = len(mean_returns)
+        constraints = ({'type': 'eq', 'fun': lambda weights: np.sum(weights) - 1})  # 約束條件：所有權重之和為1
+        bounds = tuple((0, 1) for _ in range(num_assets))  # 權重範圍：每個資產的權重在0到1之間
+        init_guess = num_assets * [1. / num_assets]  # 初始猜測值：所有資產權重相等
+
+        # 根據策略設置風險迴避參數
+        if strategy == 'conservative':
+            risk_aversion = 20
+        elif strategy == 'balanced':
+            risk_aversion = 5
+        else:  # aggressive
+            risk_aversion = 0.1
+
+        def objective(weights):
+            return risk_aversion * portfolio_variance(weights) - portfolio_return(weights)
+
+        try:
+            result = sco.minimize(objective, init_guess, method='SLSQP', bounds=bounds, constraints=constraints)
+            optimal_weights = result.x
+
+            # 計算投資計劃
+            investment_plan = {ticker: weight * investment_amount for ticker, weight in zip(prices.columns, optimal_weights)}
+            # 計算年化預期回報率
+            expected_return = np.sum(optimal_weights * prices.pct_change().mean()) * 252  # 年化收益率
+            # 計算個別公司的預期獲利率
+            individual_returns = {ticker: weight * prices.pct_change().mean()[ticker] * 252 for ticker, weight in zip(prices.columns, optimal_weights)}
+            # 計算個別公司的預計獲利金額
+            individual_profits = {ticker: investment_plan[ticker] * individual_returns[ticker] for ticker in investment_plan}
+
+            return investment_plan, expected_return, individual_returns, individual_profits
+        except ValueError as e:
+            messagebox.showerror("錯誤", f"投資組合優化錯誤： {e}")
+            return None, None, None, None
+
+    def analyze_portfolio():
+        """分析投資組合函式"""
+        try:
+            investment_amount = float(entry_investment_amount.get())  # 獲取投資金額
+            num_companies = int(entry_num_companies.get())  # 獲取投資公司數量
+            tickers = [entry_tickers[i].get().strip().upper() for i in range(num_companies)]  # 獲取公司股票代碼
+            strategy = strategy_var.get()  # 獲取投資策略
+            period = period_var.get()  # 獲取投資期間
+        except ValueError:
+            messagebox.showerror("錯誤", "請輸入有效的數字。")
+            return
+
+        if not all(tickers):
+            messagebox.showerror("錯誤", "請輸入所有公司的股票代碼。")
+            return
+
+        prices = get_stock_prices(tickers, period)
+        if prices is None:
+            return
+
+        result = optimize_portfolio(prices, strategy, investment_amount)
+        if result is None:
+            return
+
+        investment_plan, expected_return, individual_returns, individual_profits = result
+
+        result_text = f"預期回報率: {expected_return:.2%}\n\n投資計劃:\n"
+        for ticker, amount in investment_plan.items():
+            result_text += f"公司: {ticker}, 投資金額: {amount:.2f} NTD, 預期回報率: {individual_returns[ticker]:.2%}, 預期獲利: {individual_profits[ticker]:.2f} NTD\n"
+
+        messagebox.showinfo("投資組合最佳化結果", result_text)
+    #介面設計
+    frame = tk.Frame(root)
+    frame.pack(pady=20)
+
+    tk.Label(frame, text="投資金額 (NTD)").grid(row=0, column=0, padx=10, pady=10)
+    entry_investment_amount = tk.Entry(frame)
+    entry_investment_amount.grid(row=0, column=1, padx=10, pady=10)
+
+    tk.Label(frame, text="投資公司數量").grid(row=1, column=0, padx=10, pady=10)
+    entry_num_companies = tk.Entry(frame)
+    entry_num_companies.grid(row=1, column=1, padx=10, pady=10)
+
+    tk.Label(frame, text="投資策略").grid(row=2, column=0, padx=10, pady=10)
+    strategy_var = tk.StringVar(frame)
+    strategy_var.set("conservative")
+    strategy_dropdown = tk.OptionMenu(frame, strategy_var, "conservative", "balanced", "aggressive")
+    strategy_dropdown.grid(row=2, column=1, padx=10, pady=10)
+
+    tk.Label(frame, text="投資期間").grid(row=3, column=0, padx=10, pady=10)
+    period_var = tk.StringVar(frame)
+    period_var.set("1mo")
+    period_dropdown = tk.OptionMenu(frame, period_var, "1mo", "1y", "5y")  # 更新投資期間選項
+    period_dropdown.grid(row=3, column=1, padx=10, pady=10)
+
+    tk.Button(frame, text="分析投資組合", command=analyze_portfolio).grid(row=4, columnspan=2, padx=10, pady=10)
+
+    entry_tickers = []
+    for i in range(6):  # 最多支持6家公司的投資
+        entry_ticker_label = tk.Label(frame, text=f"公司 {i+1} 股票名稱")
+        entry_ticker_label.grid(row=5 + i, column=0, padx=10, pady=5)
+        entry_ticker = tk.Entry(frame)
+        entry_ticker.grid(row=5 + i, column=1, padx=10, pady=5)
+        entry_tickers.append(entry_ticker)
+
+    root.mainloop()
+
+if __name__ == "__main__":
+    run_gui()

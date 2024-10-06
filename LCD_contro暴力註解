@@ -1,0 +1,248 @@
+module LCD_CTRL(
+    clk,          // 系統時脈訊號
+    reset,        // 非同步重置信號 (高有效)
+    cmd,          // 指令 (4 位元)
+    cmd_valid,    // 指令有效訊號 (高電平表示有效)
+    IROM_Q,       // 從 IROM 中讀取的影像數據 (8 位元)
+    IROM_rd,      // IROM 讀取使能訊號
+    IROM_A,       // IROM 位址 (6 位元)
+    IRAM_valid,   // IRAM 寫入使能訊號
+    IRAM_D,       // 要寫入 IRAM 的數據 (8 位元)
+    IRAM_A,       // 要寫入 IRAM 的位址 (6 位元)
+    busy,         // 忙碌訊號，表示正在處理
+    done          // 完成訊號，表示操作完成
+);
+
+// 狀態參數
+parameter LOAD_DATA = 2'd0,   // 狀態：從 IROM 加載影像數據
+          WAIT_CMD  = 2'd1,   // 狀態：等待指令
+          PROCESS   = 2'd2,   // 狀態：處理指令
+          WRITE_DONE = 2'd3;  // 狀態：寫入完成
+
+// 暫存器
+reg [1:0] cur_state;           // 當前狀態
+reg [1:0] next_state;          // 下一狀態
+reg IROM_rd;                   // IROM 讀取使能
+reg [5:0] IROM_A;              // IROM 位址
+reg [7:0] data_buff[0:63];     // 暫存影像數據的緩存區
+reg busy;                      // 忙碌訊號
+reg [3:0] cmd_reg;             // 暫存指令
+reg [2:0] row;                 // 紀錄當前操作的 Y 軸位置 (行)
+reg [2:0] col;                 // 紀錄當前操作的 X 軸位置 (列)
+reg [5:0] output_counter;      // 用於計數輸出的像素數量
+reg IRAM_valid;                // IRAM 寫入使能
+reg [7:0] IRAM_D;              // 寫入 IRAM 的數據
+reg [5:0] IRAM_A;              // 寫入 IRAM 的位址
+reg done;                      // 完成訊號
+
+// 指令參數
+parameter Write = 4'd0, Shift_Up = 4'd1, Shift_Down = 4'd2,
+          Shift_Left = 4'd3, Shift_Right = 4'd4, Max = 4'd5,
+          Min = 4'd6, Average = 4'd7, Counterclockwise_Rotation = 4'd8,
+          Clockwise_Rotation = 4'd9, Mirror_X = 4'd10, Mirror_Y = 4'd11;
+
+// 計算當前原點位置
+reg [5:0] origin_pos;  // 用來計算操作區塊的左上角像素在 data_buff 中的位置
+
+// 狀態轉換邏輯
+always@(*)
+begin
+    case(cur_state)
+        LOAD_DATA:
+        begin
+            if (IROM_A == 6'd63) // 當讀取完 64 個像素後，進入等待指令狀態
+                next_state = WAIT_CMD;
+            else
+                next_state = LOAD_DATA;
+        end
+        WAIT_CMD: // 等待指令
+        begin
+            if (cmd_valid) // 收到有效指令後，進入處理指令狀態
+                next_state = PROCESS;
+            else
+                next_state = WAIT_CMD; // 繼續等待指令
+        end
+        PROCESS: // 處理指令
+        begin
+            if (cmd_reg == Write) // 如果指令是 Write
+            begin
+                if (output_counter == 6'd63) // 當寫入完成所有像素後，進入完成狀態
+                    next_state = WRITE_DONE;
+                else
+                    next_state = PROCESS; // 否則繼續處理
+            end
+            else
+                next_state = WAIT_CMD; // 非 Write 指令，處理完後回到等待指令狀態
+        end
+        WRITE_DONE:
+        begin
+            next_state = WAIT_CMD; // 寫入完成後回到等待指令狀態
+        end
+    endcase
+end
+
+// 狀態註冊邏輯 (根據時脈或重置信號)
+always@(posedge clk or posedge reset)
+begin
+    if (reset) // 重置邏輯
+    begin
+        cur_state <= LOAD_DATA;   // 初始化狀態
+        IROM_rd <= 1'd1;          // 啟動 IROM 讀取
+        IROM_A <= 6'd0;           // 初始化 IROM 位址
+        busy <= 1'd1;             // 系統忙碌
+        cmd_reg <= Write;         // 預設指令為 Write
+        row <= 3'd4;              // 初始化行座標 (4)
+        col <= 3'd4;              // 初始化列座標 (4)
+        output_counter <= 6'd0;   // 初始化輸出計數器
+        IRAM_valid <= 1'd0;       // 禁用 IRAM 寫入
+        IRAM_D <= 8'd0;           // 清除 IRAM 數據
+        IRAM_A <= 6'd0;           // 清除 IRAM 位址
+        done <= 1'd0;             // 完成信號設為 0
+    end
+    else
+    begin
+        cur_state <= next_state; // 更新當前狀態
+
+        case (cur_state)
+            LOAD_DATA: // 從 IROM 讀取影像數據並存入緩存區
+            begin
+                IROM_rd <= 1'd1;             // 啟動 IROM 讀取
+                IROM_A <= IROM_A + 6'd1;     // 遞增 IROM 位址
+                data_buff[IROM_A] <= IROM_Q; // 將讀取到的數據存入緩存
+            end
+
+            WAIT_CMD: // 等待指令
+            begin
+                IROM_rd <= 1'd0; // 停止 IROM 讀取
+
+                if (cmd_valid) // 如果指令有效
+                begin
+                    cmd_reg <= cmd; // 將指令暫存
+                    busy <= 1'd1;   // 系統忙碌
+                end
+                else
+                    busy <= 1'd0; // 若無有效指令，系統不忙碌
+
+                IRAM_valid <= 1'd0; // 停止 IRAM 寫入
+                done <= 1'd0;       // 清除完成訊號
+            end
+
+            PROCESS: // 根據不同指令進行操作
+            begin
+                case (cmd_reg)
+                    Write: // 將處理後的影像數據寫入 IRAM
+                    begin
+                        output_counter <= output_counter + 6'd1; // 計數器遞增
+                        IRAM_valid <= 1'd1;                      // 啟動 IRAM 寫入
+                        IRAM_D <= data_buff[output_counter];      // 將數據寫入 IRAM
+                        IRAM_A <= output_counter;                 // 設置 IRAM 位址
+                    end
+
+                    // Shift_Up, Shift_Down, Shift_Left, Shift_Right 都是位移指令
+                    Shift_Up: // 向上移動
+                    begin
+                        if (row <= 1)
+                            row <= row; // 如果已經在最上面，則不變
+                        else
+                            row <= row - 3'd1; // 否則 Y 軸位置 -1
+                    end
+
+                    Shift_Down: // 向下移動
+                    begin
+                        if (row >= 7)
+                            row <= row; // 如果已經在最下面，則不變
+                        else
+                            row <= row + 3'd1; // 否則 Y 軸位置 +1
+                    end
+
+                    Shift_Left: // 向左移動
+                    begin
+                        if (col <= 1)
+                            col <= col; // 如果已經在最左邊，則不變
+                        else
+                            col <= col - 3'd1; // 否則 X 軸位置 -1
+                    end
+
+                    Shift_Right: // 向右移動
+                    begin
+                        if (col >= 7)
+                            col <= col; // 如果已經在最右邊，則不變
+                        else
+                            col <= col + 3'd1; // 否則 X 軸位置 +1
+                    end
+
+                    Max: // 將 2x2 區域的像素設置為最大值
+                    begin
+                        // 判斷 2x2 區域的最大像素並將所有像素設為最大值
+                        if (data_buff[origin_pos] >= data_buff[origin_pos-1] &&
+                            data_buff[origin_pos] >= data_buff[origin_pos-8] &&
+                            data_buff[origin_pos] >= data_buff[origin_pos-9])
+                        begin
+                            data_buff[origin_pos]   <= data_buff[origin_pos];
+                            data_buff[origin_pos-1] <= data_buff[origin_pos];
+                            data_buff[origin_pos-8] <= data_buff[origin_pos];
+                            data_buff[origin_pos-9] <= data_buff[origin_pos];
+                        end
+                        // 判斷其他像素
+                        else if (data_buff[origin_pos-1] >= data_buff[origin_pos] &&
+                                 data_buff[origin_pos-1] >= data_buff[origin_pos-8] &&
+                                 data_buff[origin_pos-1] >= data_buff[origin_pos-9])
+                        begin
+                            data_buff[origin_pos]   <= data_buff[origin_pos-1];
+                            data_buff[origin_pos-1] <= data_buff[origin_pos-1];
+                            data_buff[origin_pos-8] <= data_buff[origin_pos-1];
+                            data_buff[origin_pos-9] <= data_buff[origin_pos-1];
+                        end
+                        // 繼續比較，更新區域內最大值
+                    end
+
+                    Min: // 將 2x2 區域的像素設置為最小值
+                    begin
+                        // 類似 Max 操作，這裡判斷最小值
+                    end
+
+                    Average: // 計算 2x2 區域的平均值
+                    begin
+                        // 計算四個像素的和並除以 4，將結果存入 2x2 區域
+                    end
+
+                    Counterclockwise_Rotation: // 逆時針旋轉 2x2 區域
+                    begin
+                        data_buff[origin_pos] <= data_buff[origin_pos-1];
+                        data_buff[origin_pos-1] <= data_buff[origin_pos-9];
+                        data_buff[origin_pos-8] <= data_buff[origin_pos];
+                        data_buff[origin_pos-9] <= data_buff[origin_pos-8];
+                    end
+
+                    Clockwise_Rotation: // 順時針旋轉 2x2 區域
+                    begin
+                        // 執行順時針旋轉
+                    end
+
+                    Mirror_X: // 沿 X 軸鏡像翻轉
+                    begin
+                        // 執行 X 軸翻轉
+                    end
+
+                    Mirror_Y: // 沿 Y 軸鏡像翻轉
+                    begin
+                        // 執行 Y 軸翻轉
+                    end
+                endcase
+            end
+
+            WRITE_DONE: // 寫入完成狀態
+            begin
+                done <= 1'd1; // 設置完成訊號
+            end
+        endcase
+    end
+end
+
+// 計算當前 2x2 區域的原點位置
+always@(*)
+begin
+    origin_pos = {row, col}; // 計算原點座標
+end
+
+endmodule

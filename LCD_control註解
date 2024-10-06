@@ -1,0 +1,288 @@
+module LCD_CTRL(
+    clk,
+    reset,
+    cmd,
+    cmd_valid,
+    IROM_Q,
+    IROM_rd,
+    IROM_A,
+    IRAM_valid,
+    IRAM_D,
+    IRAM_A,
+    busy,
+    done
+);
+    // Port declarations
+    input clk;  // 時脈訊號
+    input reset;  // 非同步重置信號，高電位有效
+    input [3:0] cmd;  // 指令輸入，控制影像操作
+    input cmd_valid;  // 指令有效訊號
+    input [7:0] IROM_Q;  // 讀取自IROM的圖像資料
+    output IROM_rd;  // 讀取IROM的致能訊號，高電位時啟動讀取
+    output [5:0] IROM_A;  // IROM地址輸出，用來索取圖像資料
+    output IRAM_valid;  // 寫入IRAM的致能訊號，高電位時啟動寫入
+    output [7:0] IRAM_D;  // 寫入IRAM的資料
+    output [5:0] IRAM_A;  // IRAM地址輸出，用來寫入處理後的圖像資料
+    output busy;  // 系統忙碌訊號，高電位表示正在處理
+    output done;  // 完成訊號，高電位表示處理完成
+    
+    // 定義狀態
+    parameter READ     = 2'd0;  // 狀態: 讀取IROM
+    parameter IDLE_CMD = 2'd1;  // 狀態: 等待指令
+    parameter OP       = 2'd2;  // 狀態: 處理操作
+    parameter WRITE    = 2'd3;  // 狀態: 寫入IRAM
+    
+    // 定義暫存器與線路
+    reg [1:0] state_cs;  // 目前狀態
+    reg [1:0] state_ns;  // 下一個狀態
+    reg [7:0] ImageBuffer[63:0];  // 影像緩存區，用來存儲從IROM讀取的8x8影像資料
+    reg [5:0] P0;  // 操作點的左上角座標
+    wire [5:0] P1, P2, P3;  // 操作點的其他三個像素座標
+    reg [5:0] counter;  // 計數器，用來追蹤寫入IRAM的位置
+    
+    reg IROM_rd;  // 讀取IROM致能
+    reg [5:0] IROM_A;  // IROM地址
+    reg IRAM_valid;  // 寫入IRAM致能
+    reg [7:0] IRAM_D;  // 要寫入IRAM的資料
+    reg [5:0] IRAM_A;  // IRAM地址
+    reg busy;  // 忙碌訊號
+    reg done;  // 完成訊號
+    reg [5:0] cmpMax, cmpMin;  // 用來儲存最大值與最小值的像素座標
+    reg [9:0] sum;  // 像素和，用於計算平均值
+
+    // 狀態切換邏輯，根據時脈正緣與重置信號來更新目前狀態
+    always@(posedge clk or posedge reset)
+    begin
+        if (reset) state_cs <= READ;  // 重置時，進入READ狀態
+        else state_cs <= state_ns;  // 否則進入下一個狀態
+    end
+    
+    // 下一個狀態的選擇邏輯
+    always@(*)
+    begin
+        case(state_cs)
+            READ:
+            begin
+                if (IROM_A == 6'd63) state_ns = IDLE_CMD;  // 當讀取完最後一個像素時，進入IDLE_CMD狀態
+                else state_ns = READ;  // 否則繼續保持在READ狀態
+            end
+            IDLE_CMD:
+            begin
+                if (cmd_valid && cmd != 4'd0) state_ns = OP;  // 若有有效指令且非Write操作，進入OP狀態
+                else if (cmd_valid && cmd == 4'd0) state_ns = WRITE;  // 若指令是Write，進入WRITE狀態
+                else state_ns = IDLE_CMD;  // 否則保持在IDLE_CMD狀態
+            end
+            OP:
+            begin
+                state_ns = IDLE_CMD;  // 處理完指令後回到IDLE_CMD狀態
+            end
+            WRITE:
+            begin
+                state_ns = WRITE;  // 寫入數據時保持在WRITE狀態
+            end
+        endcase
+    end
+    
+    // 操作點座標的計算邏輯
+    assign P1 = P0 + 6'd1;  // 操作點右邊的像素
+    assign P2 = P0 + 6'd8;  // 操作點下方的像素
+    assign P3 = P0 + 6'd9;  // 操作點右下方的像素
+    
+    // 控制信號生成邏輯
+    always@(*)
+    begin
+        case(state_cs)
+            READ:
+            begin
+                IROM_rd    = 1'd1;  // 讀取IROM啟動
+                IRAM_valid = 1'd0;  // 關閉IRAM寫入
+                busy       = 1'd1;  // 設置忙碌訊號
+            end
+            IDLE_CMD:
+            begin
+                IROM_rd    = 1'd0;  // 關閉IROM讀取
+                IRAM_valid = 1'd0;  // 關閉IRAM寫入
+                busy       = 1'd0;  // 清除忙碌訊號
+            end
+            OP:
+            begin
+                IROM_rd    = 1'd0;  // 關閉IROM讀取
+                IRAM_valid = 1'd0;  // 關閉IRAM寫入
+                busy       = 1'd1;  // 設置忙碌訊號
+            end
+            WRITE:
+            begin
+                IROM_rd    = 1'd0;  // 關閉IROM讀取
+                IRAM_valid = 1'd1;  // 啟動IRAM寫入
+                busy       = 1'd1;  // 設置忙碌訊號
+            end
+        endcase
+    end
+    
+    // IROM地址遞增邏輯，用來讀取影像資料
+    always@(posedge clk)
+    begin
+        if (reset == 1'd1) IROM_A <= 6'd0;  // 重置時地址設為0
+        else if (IROM_rd == 1'd1)
+        begin
+            if (IROM_A == 6'd63) IROM_A <= 6'd0;  // 若讀取完畢，地址設為0
+            else IROM_A <= IROM_A + 6'd1;  // 否則地址加1繼續讀取
+        end
+    end
+    
+    // IRAM寫入計數器邏輯
+    always@(posedge clk)
+    begin
+        if (reset == 1'd1) counter <= 6'd0;  // 重置時計數器設為0
+        else if (IRAM_valid == 1'd1)
+        begin
+            if (counter == 6'd63) counter <= counter;  // 當寫入完畢後保持計數器不變
+            else counter <= counter + 6'd1;  // 否則計數器加1繼續寫入
+        end
+    end
+    
+    // 延遲1個時脈周期來更新IRAM_A
+    always@(posedge clk)
+    begin
+        IRAM_A <= counter;  // IRAM地址跟隨計數器
+    end
+    
+    // 操作點P0的移動邏輯，根據指令移動座標
+    always@(posedge clk)
+    begin
+        if (reset == 1'd1) P0 <= 6'h1b;  // 重置時設置初始操作點P0 (27)
+        else
+        begin
+            if (state_cs == IDLE_CMD)
+            begin
+                case(cmd)
+                    4'd1: // 上移
+                    begin
+                        if (P0 > 6'd7) P0 <= P0 - 6'd8;  // 上移8格，若超過範圍則不動
+                        else P0 <= P0;
+                    end
+                    4'd2: // 下移
+                    begin
+                        if (P0 < 6'h30) P0 <= P0 + 6'd8;  // 下移8格，若超過範圍則不動
+                        else P0 <= P0;
+                    end
+                    4'd3: // 左移
+                    begin
+                        if (P0[2:0] == 3'd0) P0 <= P0;  // 在最左列時不動
+                        else P0 <= P0 - 6'd1;  // 左移1格
+                    end
+                    4'd4: // 右移
+                    begin
+                        if (P0[2:0] == 3'd7) P0 <= P0;  // 在最右列時不動
+                        else P0 <= P0 + 6'd1;  // 右移1格
+                    end
+                endcase
+            end
+        end
+    end
+    
+    // 最大值比較器，計算出P0, P1, P2, P3中的最大值像素
+    always@(*)
+    begin
+        if (ImageBuffer[P0] >= ImageBuffer[P1] && ImageBuffer[P0] >= ImageBuffer[P2] && ImageBuffer[P0] >= ImageBuffer[P3]) cmpMax = P0;
+        else if (ImageBuffer[P1] >= ImageBuffer[P0] && ImageBuffer[P1] >= ImageBuffer[P2] && ImageBuffer[P1] >= ImageBuffer[P3]) cmpMax = P1;
+        else if (ImageBuffer[P2] >= ImageBuffer[P0] && ImageBuffer[P2] >= ImageBuffer[P1] && ImageBuffer[P2] >= ImageBuffer[P3]) cmpMax = P2;
+        else cmpMax = P3;
+    end
+    
+    // 最小值比較器，計算出P0, P1, P2, P3中的最小值像素
+    always@(*)
+    begin
+        if (ImageBuffer[P0] <= ImageBuffer[P1] && ImageBuffer[P0] <= ImageBuffer[P2] && ImageBuffer[P0] <= ImageBuffer[P3]) cmpMin = P0;
+        else if (ImageBuffer[P1] <= ImageBuffer[P0] && ImageBuffer[P1] <= ImageBuffer[P2] && ImageBuffer[P1] <= ImageBuffer[P3]) cmpMin = P1;
+        else if (ImageBuffer[P2] <= ImageBuffer[P0] && ImageBuffer[P2] <= ImageBuffer[P1] && ImageBuffer[P2] <= ImageBuffer[P3]) cmpMin = P2;
+        else cmpMin = P3;
+    end
+    
+    // 計算操作點4個像素的和，用來計算平均值
+    always@(*)
+    begin
+        sum = ImageBuffer[P0] + ImageBuffer[P1] + ImageBuffer[P2] + ImageBuffer[P3];
+    end
+    
+    // 根據不同的操作命令，更新ImageBuffer中的像素資料
+    always@(posedge clk)
+    begin
+        case(state_cs)
+            READ:
+            begin
+                if (IROM_rd == 1'd1) ImageBuffer[IROM_A] <= IROM_Q;  // 從IROM讀取數據並存入ImageBuffer
+            end
+            IDLE_CMD:
+            begin
+                case(cmd)
+                    4'd5: // 最大值操作
+                    begin
+                        ImageBuffer[P0] <= ImageBuffer[cmpMax];
+                        ImageBuffer[P1] <= ImageBuffer[cmpMax];
+                        ImageBuffer[P2] <= ImageBuffer[cmpMax];
+                        ImageBuffer[P3] <= ImageBuffer[cmpMax];
+                    end
+                    4'd6: // 最小值操作
+                    begin
+                        ImageBuffer[P0] <= ImageBuffer[cmpMin];
+                        ImageBuffer[P1] <= ImageBuffer[cmpMin];
+                        ImageBuffer[P2] <= ImageBuffer[cmpMin];
+                        ImageBuffer[P3] <= ImageBuffer[cmpMin];
+                    end
+                    4'd7: // 平均值操作
+                    begin
+                        ImageBuffer[P0] <= sum[9:2];  // 取平均值並捨去小數部分
+                        ImageBuffer[P1] <= sum[9:2];
+                        ImageBuffer[P2] <= sum[9:2];
+                        ImageBuffer[P3] <= sum[9:2];
+                    end
+                    4'd8: // 逆時針旋轉
+                    begin
+                        ImageBuffer[P0] <= ImageBuffer[P1];
+                        ImageBuffer[P1] <= ImageBuffer[P3];
+                        ImageBuffer[P2] <= ImageBuffer[P0];
+                        ImageBuffer[P3] <= ImageBuffer[P2];
+                    end
+                    4'd9: // 順時針旋轉
+                    begin
+                        ImageBuffer[P0] <= ImageBuffer[P2];
+                        ImageBuffer[P1] <= ImageBuffer[P0];
+                        ImageBuffer[P2] <= ImageBuffer[P3];
+                        ImageBuffer[P3] <= ImageBuffer[P1];
+                    end
+                    4'd10: // X軸鏡像
+                    begin
+                        ImageBuffer[P0] <= ImageBuffer[P2];
+                        ImageBuffer[P1] <= ImageBuffer[P3];
+                        ImageBuffer[P2] <= ImageBuffer[P0];
+                        ImageBuffer[P3] <= ImageBuffer[P1];
+                    end
+                    4'd11: // Y軸鏡像
+                    begin
+                        ImageBuffer[P0] <= ImageBuffer[P1];
+                        ImageBuffer[P1] <= ImageBuffer[P0];
+                        ImageBuffer[P2] <= ImageBuffer[P3];
+                        ImageBuffer[P3] <= ImageBuffer[P2];
+                    end
+                endcase
+            end
+            OP:
+            begin
+                // 在OP狀態中，根據命令處理影像數據
+            end
+            WRITE:
+            begin
+                if (IRAM_valid == 1'd1) IRAM_D <= ImageBuffer[counter];  // 將處理後的數據寫入IRAM
+            end
+        endcase
+    end
+    
+    // 當所有64個像素數據寫入完畢時，將done信號設為高電位
+    always @(posedge clk)
+    begin
+        if (IRAM_A == 6'd63) done <= 1'd1;
+        else done <= 1'd0;
+    end
+    
+endmodule

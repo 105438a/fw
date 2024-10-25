@@ -1,0 +1,208 @@
+module multiplier8_8bit(A, B, P);
+  input [7:0] A, B;
+  output [15:0] P;
+  
+  wire b0a1, b0a2, b0a3, b0a4, b0a5, b0a6,b0a7;
+  wire b1a0, b1a1, b1a2, b1a3, b1a4, b1a5, b1a6, b1a7;
+  wire b2a0, b2a1, b2a2, b2a3, b2a4, b2a5, b2a6, b2a7;
+  wire b3a0, b3a1, b3a2, b3a3, b3a4, b3a5, b3a6, b3a7;
+  wire b4a0, b4a1, b4a2, b4a3, b4a4, b4a5, b4a6, b4a7;
+  wire b5a0, b5a1, b5a2, b5a3, b5a4, b5a5, b5a6, b5a7;
+  wire b6a0, b6a1, b6a2, b6a3, b6a4, b6a5, b6a6, b6a7;
+  wire b7a0, b7a1, b7a2, b7a3, b7a4, b7a5, b7a6, b7a7;
+  wire [7:0] sum_carry1, sum_carry2, sum_carry3, sum_carry4, sum_carry5, sum_carry6;
+  wire cin;
+  
+  assign cin = 1'b0;
+  
+  and(P[0], A[0], B[0]);
+  and(b0a1, A[1], B[0]);
+  and(b0a2, A[2], B[0]);
+  and(b0a3, A[3], B[0]);
+  and(b0a4, A[4], B[0]);
+  and(b0a5, A[5], B[0]);
+  and(b0a6, A[6], B[0]);
+  and(b0a7, A[7], B[0]);
+  
+  and(b1a0, A[0], B[1]);
+  and(b1a1, A[1], B[1]);
+  and(b1a2, A[2], B[1]);
+  and(b1a3, A[3], B[1]);
+  and(b1a4, A[4], B[1]);
+  and(b1a5, A[5], B[1]);
+  and(b1a6, A[6], B[1]);
+  and(b1a7, A[7], B[1]);
+  
+  PPA8 adder1(.A({1'b0, b0a7, b0a6, b0a5, b0a4, b0a3, b0a2, b0a1}), .B({b1a7, b1a6, b1a5, b1a4, b1a3, b1a2, b1a1, b1a0}), .Cin(cin), .Sum({sum_carry1[6:0], P[1]}), .Cout(summy_carry1[7]));
+  
+  and(b2a0, A[0], B[2]);
+  and(b2a1, A[1], B[2]);
+  and(b2a2, A[2], B[2]);
+  and(b2a3, A[3], B[2]);
+  and(b2a4, A[4], B[2]);
+  and(b2a5, A[5], B[2]);
+  and(b2a6, A[6], B[2]);
+  and(b2a7, A[7], B[2]);
+  
+  PPA8 adder2(.A(sum_carry1), .B({b2a7, b2a6, b2a5, b2a4, b2a3, b2a2, b2a1, b2a0}), .Cin(cin), .Sum({sum_carry2[6:0], P[2]}), .Cout(sum_carry2[7]));
+  
+  and(b3a0, A[0], B[3]);
+  and(b3a1, A[1], B[3]);
+  and(b3a2, A[2], B[3]);
+  and(b3a3, A[3], B[3]);
+  and(b3a4, A[4], B[3]);
+  and(b3a5, A[5], B[3]);
+  and(b3a6, A[6], B[3]);
+  and(b3a7, A[7], B[3]);
+  
+  PPA8 adder3(.A(sum_carry2), .B({b3a7, b3a6, b3a5, b3a4, b3a3, b3a2, b3a1, b3a0}), .Cin(cin), .Sum({sum_carry3[6:0], P[3]}), .Cout(sum_carry3[7]));
+  
+  and(b4a0, A[0], B[4]);
+  and(b4a1, A[1], B[4]);
+  and(b4a2, A[2], B[4]);
+  and(b4a3, A[3], B[4]);
+  and(b4a4, A[4], B[4]);
+  and(b4a5, A[5], B[4]);
+  and(b4a6, A[6], B[4]);
+  and(b4a7, A[7], B[4]);
+  
+  PPA8 adder4(.A(sum_carry3), .B({b4a7, b4a6, b4a5, b4a4, b4a3, b4a2, b4a1, b4a0}), .Cin(cin), .Sum({sum_carry4[6:0], P[4]}), .Cout(sum_carry4[7]));
+  
+  and(b5a0, A[0], B[5]);
+  and(b5a1, A[1], B[5]);
+  and(b5a2, A[2], B[5]);
+  and(b5a3, A[3], B[5]);
+  and(b5a4, A[4], B[5]);
+  and(b5a5, A[5], B[5]);
+  and(b5a6, A[6], B[5]);
+  and(b5a7, A[7], B[5]);
+  
+  PPA8 adder5(.A(sum_carry4), .B({b5a7, b5a6, b5a5, b5a4, b5a3, b5a2, b5a1, b5a0}), .Cin(cin), .Sum({sum_carry5[6:0], P[5]}), .Cout(sum_carry5[7]));
+  
+  and(b6a0, A[0], B[6]);
+  and(b6a1, A[1], B[6]);
+  and(b6a2, A[2], B[6]);
+  and(b6a3, A[3], B[6]);
+  and(b6a4, A[4], B[6]);
+  and(b6a5, A[5], B[6]);
+  and(b6a6, A[6], B[6]);
+  and(b6a7, A[7], B[6]);
+  
+  PPA8 adder6(.A(sum_carry5), .B({b6a7, b6a6, b6a5, b6a4, b6a3, b6a2, b6a1, b6a0}), .Cin(cin), .Sum({sum_carry6[6:0], P[6]}), .Cout(sum_carry6[7]));
+  
+  and(b7a0, A[0], B[7]);
+  and(b7a1, A[1], B[7]);
+  and(b7a2, A[2], B[7]);
+  and(b7a3, A[3], B[7]);
+  and(b7a4, A[4], B[7]);
+  and(b7a5, A[5], B[7]);
+  and(b7a6, A[6], B[7]);
+  and(b7a7, A[7], B[7]);
+  
+  PPA8 adder7(.A(sum_carry6), .B({b7a7, b7a6, b7a5, b7a4, b7a3, b7a2, b7a1, b7a0}), .Cin(cin), .Sum(P[14:7]), .Cout(P[15]));
+  
+  
+  
+endmodule
+
+module PPA8(A, B, Cin, Sum, Cout);
+  input  [7:0] A, B;
+input        Cin;
+output [7:0] Sum;
+output Cout;
+
+wire [6:0] c;
+wire [7:0] p, g;
+wire P32, G32, P43, G43, P54, G54, P52, G52, P65, G65, P63, G63, P76, G76, P74, G74, P87, G87, P85, G85;
+wire carry_wire[6:0];
+  and(p[0], A[0], B[0]);
+  and(p[1], A[1], B[1]);
+  and(p[2], A[2], B[2]);
+  and(p[3], A[3], B[3]);
+  and(p[4], A[4], B[4]);
+  and(p[5], A[5], B[5]);
+  and(p[6], A[6], B[6]);
+  and(p[7], A[7], B[7]);
+
+  or(g[0], A[0], B[0]);
+  or(g[1], A[1], B[1]);
+  or(g[2], A[2], B[2]);
+  or(g[3], A[3], B[3]);
+  or(g[4], A[4], B[4]);
+  or(g[5], A[5], B[5]);
+  or(g[6], A[6], B[6]);
+  or(g[7], A[7], B[7]);
+
+blue_cell Q11(.p2(p[0]), .g2(g[0]), .g1(Cin), .G(c[0]));
+
+blue_cell Q21(.p2(p[1]), .g2(g[1]), .g1(c[0]), .G(c[1]));
+
+black_cell Q32(.p2(p[2]), .g2(g[2]), .p1(p[1]), .g1(g[1]), .P(P32), .G(G32));
+blue_cell Q31(.p2(P32), .g2(G32), .g1(c[0]), .G(c[2]));
+
+black_cell Q43(.p2(p[3]), .g2(g[3]), .p1(p[2]), .g1(g[2]), .P(P43), .G(G43));
+blue_cell Q41(.p2(P43), .g2(G43), .g1(c[1]), .G(c[3]));
+
+black_cell Q54(.p2(p[4]), .g2(g[4]), .p1(p[3]), .g1(g[3]), .P(P54), .G(G54));
+black_cell Q52(.p2(P54), .g2(G54), .p1(P32), .g1(G32), .P(P52), .G(G52));
+blue_cell Q51(.p2(P52), .g2(G52), .g1(c[0]), .G(c[4]));
+
+black_cell Q65(.p2(p[5]), .g2(g[5]), .p1(p[4]), .g1(g[4]), .P(P65), .G(G65));
+black_cell Q63(.p2(P65), .g2(G65), .p1(P43), .g1(G43), .P(P63), .G(G63));
+blue_cell Q61(.p2(P63), .g2(G63), .g1(c[1]), .G(c[5]));
+
+black_cell Q76(.p2(p[6]), .g2(g[6]), .p1(p[5]), .g1(g[5]), .P(P76), .G(G76));
+black_cell Q74(.p2(P76), .g2(G76), .p1(P54), .g1(G54), .P(P74), .G(G74));
+blue_cell Q71(.p2(P74), .g2(G74), .g1(c[2]), .G(c[6]));
+
+black_cell Q87(.p2(p[7]), .g2(g[7]), .p1(p[6]), .g1(g[6]), .P(P87), .G(G87));
+black_cell Q85(.p2(P87), .g2(G87), .p1(P65), .g1(G65), .P(P85), .G(G85));
+blue_cell Q81(.p2(P85), .g2(G85), .g1(c[3]), .G(Cout));
+
+  fa fa0(.a(A[0]), .b(B[0]), .cin(Cin), .cout(carry_wire[0]), .s(Sum[0]));
+  fa fa1(.a(A[0]), .b(B[0]), .cin(c[0]), .cout(carry_wire[1]), .s(Sum[0]));
+  fa fa2(.a(A[0]), .b(B[0]), .cin(c[1]), .cout(carry_wire[2]), .s(Sum[0]));
+  fa fa3(.a(A[0]), .b(B[0]), .cin(c[2]), .cout(carry_wire[3]), .s(Sum[0]));
+  fa fa4(.a(A[0]), .b(B[0]), .cin(c[3]), .cout(carry_wire[4]), .s(Sum[0]));
+  fa fa5(.a(A[0]), .b(B[0]), .cin(c[4]), .cout(carry_wire[5]), .s(Sum[0]));
+  fa fa6(.a(A[0]), .b(B[0]), .cin(c[5]), .cout(carry_wire[6]), .s(Sum[0]));
+  fa fa7(.a(A[0]), .b(B[0]), .cin(c[6]), .cout(Cout), .s(Sum[0]));
+
+endmodule
+
+module fa(a, b, cin, cout, s);
+input a, b, cin;
+output cout, s;
+
+wire and1, and2, and3, or1, xor1;
+
+and(and1, a, b);
+and(and2, b, cin);
+and(and3, a, cin);
+or(or1, and1, and2);
+or(cout, or1, and3);
+xor(xor1, a, b);
+xor(s, xor1, cin);
+
+endmodule
+
+module black_cell (p2, g2, p1, g1, P, G);
+input p2, g2, p1, g1;
+output P, G;
+wire and1;
+
+and(and1, p2, g1);
+or(G, g2, and1);
+and(P, p1, p2);
+
+endmodule
+
+module blue_cell (p2, g2, g1, G);
+input p2, g2, g1;
+output G;
+wire and1;
+
+and(and1, p2, g1);
+or(G, g2, and1);
+
+endmodule

@@ -1,0 +1,138 @@
+// Code your design here
+// Code your design here
+module LBP(clk, rst, enable, gray_addr, gray_OE, gary_data, lbp_addr, lbp_WEN, lbp_data, finish）
+           input clk, rst, enable;
+           output [11:0] gray_addr, lbp_addr;
+           output gray_OE, lbp_WEN, finish;
+           input [7:0] gray_data, lbp_data;
+           
+           reg [7:0] data_temp [11:0];
+           reg [7:0] lbp_temp [11:0];
+           reg [11:0] gary_addr_buffer;
+           wire [7:0] s;
+           wire [7:0] mul_constant;
+           
+           parameter IDLE     = 2'd0;
+           parameter READ     = 2'd1;
+           parameter OP       = 2'd2;
+           parameter WRITE    = 2'd3;
+           
+           reg [11:0] counter;
+           reg [1:0] cst;
+           wire [1:0] nst;
+           reg [5:0] x, y;
+           
+           always@(posedge clk or negedge rst) begin
+             if(!rst)begin
+               cst <= IDLE;
+               lpb_temp <= 96'd0;
+               gray_addr <= 12'd0;
+               x <= 8'd1;
+               y <= 8'd1;
+             end
+             else
+               cst <= nst;
+           end
+           
+           // nst logic
+           always@(*) begin
+             case (cst)
+               IDLE: begin
+                 if(enable == 1'b1)
+                   nst = READ;
+                 else
+                   nst = IDLE;
+               end
+               READ: begin
+                 if(gray_addr == 12'd4095)
+                   nst = OP;
+                 else
+                   nst = READ;
+               end
+               OP: begin
+                 if(x==8'd63 && y = 8'd63)
+                   nst = WRITE;
+                 else
+                   nst = OP;
+               end
+               WRITE: begin
+                 if(lbp_addr == 12'd4095)
+                   nst = IDLE;
+                 else
+                   nst = WRITE;
+               endcase
+             end
+               
+               
+            // control signal
+           always@(*) begin
+             case(cst)
+               IDLE: begin
+                 gary_OE = 1'b0;
+                 lbp_WEN = 1'b0;
+               end
+               READ: begin
+                 gary_OE = 1'b1;
+                 lbp_WEN = 1'b0;
+               end
+               OP: begin
+                 gary_OE = 1'b0;
+                 lbp_WEN = 1'b0;
+               end
+               WRITE: begin
+                 gary_OE = 1'b0;
+                 lbp_WEN = 1'b1;
+               end
+             endcase
+           end
+               
+               always@(posedge clk)begin
+                 if(rst)
+                 case(cst)
+                   IDLE:
+                     
+                     
+                   READ: begin
+                     gary_addr <= gary_addr + 1'd1;
+                     gary_addr_buffer <= gary_addr;
+                     data_temp[gary_addr_buffer] <= gary_data;
+                   end
+                   
+                   OP:begin
+                     if(x == 5'd63)begin
+                       y <= y+5'd1;
+                     end
+                     else
+                       if(
+                     
+                   end
+                   
+               end
+           
+             
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+               
+           endmodule

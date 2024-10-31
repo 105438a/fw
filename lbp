@@ -141,6 +141,18 @@ module LBP(clk, rst, enable, gray_addr, gray_OE, gray_data, lbp_addr, lbp_WEN, l
                            s[7] = (data_temp[{y,x}+12'd65] >= data_temp[{y,x}]) ? ((data_temp[{y,x}+12'd65] - data_temp[{y,x}])<<7):8'd0;
                            lbp_temp[{y,x}] = s[0] + s[1] + s[2] + s[3] +s[4] + s[5] +s[6] + s[7];
                          end
+                         else begin
+                           s[0] = 8'd0;
+                           s[1] = 8'd0;
+                           s[2] = 8'd0;
+                           s[3] = 8'd0;
+                           s[4] = 8'd0;
+                           s[5] = 8'd0;
+                           s[6] = 8'd0;
+                           s[7] = 8'd0;
+                           lbp_temp[{y,x}] = s[0] + s[1] + s[2] + s[3] +s[4] + s[5] +s[6] + s[7];
+                         end
+           
                          
                        end
            

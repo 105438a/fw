@@ -1,0 +1,232 @@
+module SET (
+    input clk,
+    input rst,
+    input en,
+    input [23:0] central,
+    input [11:0] radius,
+    input [1:0] mode,
+    output reg busy,
+    output reg valid,
+    output reg [7:0] candidate
+);
+
+    // Internal signals
+    reg [7:0] x1, y1, x2, y2, x3, y3;  // Coordinates for A, B, C
+    reg [3:0] r1, r2, r3;              // Radii for A, B, C
+    reg [7:0] element_count;           // Temporary storage for count
+    reg [2:0] state;                   // FSM state
+    integer i, j;
+    // FSM states
+    localparam IDLE    = 3'd0,
+               BUSY    = 3'd1,
+               COMPUTE = 3'd2,
+               OUTPUT  = 3'd3;
+
+    // Decode central and radius inputs
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            x1 <= 0; y1 <= 0; x2 <= 0; y2 <= 0; x3 <= 0; y3 <= 0;
+            r1 <= 0; r2 <= 0; r3 <= 0;
+        end else if (en) begin
+            x1 <= central[23:20]; y1 <= central[19:16];
+            x2 <= central[15:12]; y2 <= central[11:8];
+            x3 <= central[7:4];   y3 <= central[3:0];
+            r1 <= radius[11:8];   r2 <= radius[7:4];   r3 <= radius[3:0];
+        end
+    end
+
+    // FSM for control flow
+    /*always @(posedge clk or posedge rst) begin
+        if (rst) begin
+            state <= IDLE;
+            busy <= 0;
+            valid <= 0;
+            candidate <= 0;
+        end else begin
+            case (state)
+                IDLE: begin
+                    if (en) begin
+                        busy <= 1;
+                        state <= BUSY;
+                    end
+                end
+                BUSY: begin
+                    state <= COMPUTE;
+                end
+                COMPUTE: begin
+                    // Perform calculations based on mode
+                    case (mode)
+                        2'b00: element_count = compute_single_set(x1, y1, r1);
+                        2'b01: element_count = compute_intersection(x1, y1, r1, x2, y2, r2);
+                        2'b10: element_count = compute_difference(x1, y1, r1, x2, y2, r2) + compute_difference(x2, y2, r2, x1, y1, r1) ;
+                        2'b11: element_count = compute_intersection(x1, y1, r1, x2, y2, r2) - compute_advanced(x1, y1, r1, x2, y2, r2, x3, y3, r3) + compute_intersection(x1, y1, r1, x3, y3, r3) - compute_advanced(x1, y1, r1, x2, y2, r2, x3, y3, r3) + compute_intersection(x2, y2, r2, x3, y3, r3) - compute_advanced(x1, y1, r1, x2, y2, r2, x3, y3, r3);
+                    endcase
+                    state <= OUTPUT;
+                end
+                OUTPUT: begin
+                    candidate <= element_count;
+                    valid <= 1;
+                    busy <= 0;
+                    state <= IDLE;
+                end
+            endcase
+        end
+    end */
+    always @(posedge clk) begin
+        if (state == COMPUTE) begin
+            if(j>=8) begin
+            j <= 0;
+            i <= i+1;
+            end
+            else begin
+            j <= j+1;    
+            end
+        end
+        else begin
+            i <= 0;
+            j <= 0;
+        end
+    end
+
+    always @(posedge clk or posedge rst) begin
+        if (rst) begin 
+            state <= IDLE;
+            busy <= 0;
+            valid <= 0;
+            candidate <= 0;
+            element_count <= 0;
+        end
+        else begin
+            case (state)
+                IDLE: begin
+                    if(en) begin
+                        busy <= 1'b1;
+                        state <= COMPUTE;
+                    end
+                    else begin
+                        state <= IDLE;
+                    end
+                end 
+
+                COMPUTE: begin
+                    if(i>=8 && j>=8) begin
+                        state <= OUTPUT;
+                        candidate <= element_count;
+                    end
+                    else
+                    case (mode)
+                        2'b00: begin
+                            if ((i-x1)*(i-x1)+(j-y1)*(j-y1) <= r1*r1) begin
+                                element_count <= element_count + 1;
+                            end
+                            else begin
+                                element_count <= element_count;
+                            end
+                        end 
+                        2'b01: begin
+                            if(((i-x1)*(i-x1)+(j-y1)*(j-y1) <= r1*r1) && ((i-x2)*(i-x2)+(j-y2)*(j-y2) <= r2*r2)) begin
+                                element_count <= element_count + 1;
+                            end
+                            else begin
+                                element_count <= element_count;
+                            end
+                        end
+                        2'b10: begin
+                            if((((i-x1)*(i-x1)+(j-y1)*(j-y1) <= r1*r1) && !((i-x2)*(i-x2)+(j-y2)*(j-y2) <= r2*r2)) || (!((i-x1)*(i-x1)+(j-y1)*(j-y1) <= r1*r1) && ((i-x2)*(i-x2)+(j-y2)*(j-y2) <= r2*r2))) begin
+                                element_count <= element_count + 1;
+                            end
+                            else begin
+                                element_count <= element_count;
+                            end
+                        end
+                        2'b11: begin
+                            if((((i-x1)*(i-x1)+(j-y1)*(j-y1) <= r1*r1) && ((i-x2)*(i-x2)+(j-y2)*(j-y2) <= r2*r2) && !((i-x3)*(i-x3)+(j-y3)*(j-y3) <= r3*r3)) || (((i-x1)*(i-x1)+(j-y1)*(j-y1) <= r1*r1) && !((i-x2)*(i-x2)+(j-y2)*(j-y2) <= r2*r2) && ((i-x3)*(i-x3)+(j-y3)*(j-y3) <= r3*r3)) || (!((i-x1)*(i-x1)+(j-y1)*(j-y1) <= r1*r1) && ((i-x2)*(i-x2)+(j-y2)*(j-y2) <= r2*r2) && ((i-x3)*(i-x3)+(j-y3)*(j-y3) <= r3*r3))) begin
+                                element_count <= element_count + 1;
+                            end
+                            else begin
+                                element_count <= element_count;
+                            end
+                        end
+                        default: element_count <= element_count;
+                    endcase
+                end
+
+                OUTPUT: begin
+                    valid <= 1'b1;
+                    busy  <= 1'b0;
+                    state <= IDLE;
+                end
+                default: state <= IDLE;
+            endcase
+        end
+    end
+
+
+    // Helper functions for set operations
+    /*function [5:0] compute_single_set(
+        input [3:0] x, input [3:0] y, input [3:0] r
+    );
+        integer i, j;
+        compute_single_set = 0;
+        for (i = 1; i <= 8; i = i + 1) begin
+            for (j = 1; j <= 8; j = j + 1) begin
+                if (((i - x) * (i - x) + (j - y) * (j - y)) <= r * r) begin
+                    compute_single_set = compute_single_set + 1;
+                end
+            end
+        end
+    endfunction
+
+    function [5:0] compute_intersection(
+        input [3:0] x1, input [3:0] y1, input [3:0] r1,
+        input [3:0] x2, input [3:0] y2, input [3:0] r2
+    );
+        integer i, j;
+        compute_intersection = 0;
+        for (i = 1; i <= 8; i = i + 1) begin
+            for (j = 1; j <= 8; j = j + 1) begin
+                if (((i - x1) * (i - x1) + (j - y1) * (j - y1)) <= r1 * r1 &&
+                    ((i - x2) * (i - x2) + (j - y2) * (j - y2)) <= r2 * r2) begin
+                    compute_intersection = compute_intersection + 1;
+                end
+            end
+        end
+    endfunction
+
+    function [5:0] compute_difference(
+        input [3:0] x1, input [3:0] y1, input [3:0] r1,
+        input [3:0] x2, input [3:0] y2, input [3:0] r2
+    );
+        integer i, j;
+        compute_difference = 0;
+        for (i = 1; i <= 8; i = i + 1) begin
+            for (j = 1; j <= 8; j = j + 1) begin
+                if (((i - x1) * (i - x1) + (j - y1) * (j - y1)) <= r1 * r1 &&
+                    !(((i - x2) * (i - x2) + (j - y2) * (j - y2)) <= r2 * r2)) begin
+                    compute_difference = compute_difference + 1;
+                end
+            end
+        end
+    endfunction
+
+    function [5:0] compute_advanced(
+        input [3:0] x1, input [3:0] y1, input [3:0] r1,
+        input [3:0] x2, input [3:0] y2, input [3:0] r2,
+        input [3:0] x3, input [3:0] y3, input [3:0] r3
+    );
+        integer i, j;
+        compute_advanced = 0;
+        for (i = 1; i <= 8; i = i + 1) begin
+            for (j = 1; j <= 8; j = j + 1) begin
+                if (((i - x1) * (i - x1) + (j - y1) * (j - y1)) <= r1 * r1 &&
+                    ((i - x2) * (i - x2) + (j - y2) * (j - y2)) <= r2 * r2 &&
+                    ((i - x3) * (i - x3) + (j - y3) * (j - y3)) <= r3 * r3) begin
+                    compute_advanced = compute_advanced + 1;
+                end
+            end
+        end
+    endfunction */
+
+endmodule
+
+

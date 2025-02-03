@@ -1,0 +1,154 @@
+module geofence (clk, reset, X, Y, valid, is_inside);
+input clk;
+input reset;
+input [9:0] X;
+input [9:0] Y;
+output reg valid;
+output reg is_inside;
+
+localparam  IDLE    = 3'd0,
+            SORT0   = 3'd1,
+            SORT1   = 3'd2,
+            SORT2   = 3'd3,
+            COMPUTE = 3'd4,
+            OUTPUT  = 3'd5;
+
+reg [2:0] cst, nst;
+reg [2:0] count;
+reg [9:0] x [2:0];
+reg [9:0] y [2:0];
+integer [2:0] i, j;
+always @(posedge clk or posedge reset) begin
+    if (reset) begin
+        valid <= 1'b0;
+        is_inside <= 1'b1;
+        count <= 3'b0;
+        i <= 3;
+        j <= 3;
+    end
+end
+
+always @(posedge clk or posedge reset) begin
+    if (reset) begin
+        cst <= IDLE;
+    end
+    else begin
+        cst <= nst;
+    end
+end
+
+always @(*) begin
+    case (cst)
+        IDLE: begin
+            if (count > 6) begin
+                nst = SORT0;
+            end
+            else begin
+                nst = IDLE;
+            end
+        end 
+        SORT0: begin
+            if(((x[j-1]-x[1])*(y[j]-y[1]))-((x[j]-x[1])*(y[j-1]*y[1])) > 0) begin
+                nst = SORT1;
+            end
+            else if (i > 6) begin
+                nst = COMPUTE;
+            end
+            else begin
+                nst = SORT2;
+            end
+        end
+        SORT1: begin
+            if (j > 2) begin
+                nst = SORT0;
+            end
+            else begin
+                nst = SORT2
+            end
+        end
+        SORT2: begin
+            if (i > 6) begin
+                nst = COMPUTE;
+            end
+            else begin
+                nst = SORT0;
+            end
+        end
+        COMPUTE: begin
+            if (count > 6) begin
+                nst <= OUTPUT;
+            end
+            else begin
+                nst <= COMPUTE;
+            end
+        end
+        OUTPUT: begin
+            nst <= IDLE;
+        end
+    endcase
+end
+
+always @(posedge clk) begin
+    case (cst)
+        IDLE: begin
+            if (reset) begin
+                cst <= IDLE;
+            end
+            else begin
+
+                if(count <= 6) begin
+                    x[count] <= X;
+                    y[count] <= Y;
+                    count <= count + 1;
+                end
+                else begin
+                    count <= 3'b1;
+                end
+            end
+        end
+        SORT0: begin
+            if(((x[j-1]-x[1])*(y[j]-y[1]))-((x[j]-x[1])*(y[j-1]*y[1])) > 0) begin
+                    x[j] <= x[j-1];
+                    y[j] <= y[j-1];
+                    x[j-1] <= x[j];
+                    y[j-1] <= j[j];
+                    j <= j-1;
+                end
+        end 
+        SORT1: begin
+            
+        end
+        SORT2: begin
+            if (i > 6) begin
+                i <= 3;
+                j <= 3;
+            end
+            else begin
+                i <= i + 1;
+                j <= i + 1;
+            end
+        end
+        COMPUTE: begin
+            if (count < 6) begin
+                if (((x[count]-x[0])*(y[count+1]-y[count])-((x[count+1]-x[count])*(y[count]-y[0])))>0) begin
+                    is_inside <= 0;
+                end
+            end
+            else if (count == 6) begin
+                if (((x[count]-x[0])*(y[count+1]-y[count])-((x[count+1]-x[count])*(y[count]-y[0])))>0) begin
+                    is_inside <= 0;
+                end
+                valid <= 1;
+            end
+        end
+        OUTPUT: begin
+            count <= 0;
+            valid <= 0;
+            is_inside <= 1;
+        end
+    endcase
+
+end
+
+
+endmodule

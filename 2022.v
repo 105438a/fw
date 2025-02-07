@@ -10,7 +10,7 @@ output reg Valid );
 
 reg [2:0] cst, nst;
 reg [9:0] currentcost;
-reg [2:0] sequence [2:0];
+reg [2:0] seq [2:0];
 reg [2:0] i, j, Min;
 parameter IDLE = 3'd0, 
           CAL = 3'd1, 
@@ -23,14 +23,14 @@ parameter IDLE = 3'd0,
 
 always @(posedge CLK or posedge RST) begin
     if(RST) begin
-        sequence[0] <= 0;
-        sequence[1] <= 1;
-        sequence[2] <= 2;
-        sequence[3] <= 3;
-        sequence[4] <= 4;
-        sequence[5] <= 5;
-        sequence[6] <= 6;
-        sequence[7] <= 7;
+        seq[0] <= 0;
+        seq[1] <= 1;
+        seq[2] <= 2;
+        seq[3] <= 3;
+        seq[4] <= 4;
+        seq[5] <= 5;
+        seq[6] <= 6;
+        seq[7] <= 7;
         cst <= IDLE;
         currentcost <= 0;
         i <= 0;
@@ -62,7 +62,7 @@ always @(*) begin
             nst = FIND0;
         end
         FIND0: begin
-            if (sequence[W] > sequence[W-1]) begin
+            if (seq[W] > seq[W-1]) begin
                 nst = FIND1;
             end
             else if (W == 0) begin
@@ -101,7 +101,7 @@ end
 always @(posedge CLK) begin
     if (cst == CAL) begin
         W <= W + 1;
-        J <= sequence[W];
+        J <= seq[W];
     end
 end
 
@@ -125,7 +125,7 @@ end
 
 always @(posedge CLK) begin
     if (cst == FIND0) begin
-        if (sequence[W] < sequence[W-1]) begin
+        if (seq[W] < seq[W-1]) begin
              W <= W - 1;
         end
         else begin
@@ -137,9 +137,9 @@ end
 always @(posedge CLK) begin
     if (cst == FIND1) begin
         W <= W + 1;
-        if (sequence[W] > sequence[i]) begin
-            if (sequence[W] < Min) begin
-                Min <= sequence[W]
+        if (seq[W] > seq[i]) begin
+            if (seq[W] < Min) begin
+                Min <= seq[W]
                 j <= W;
             end
         end
@@ -148,8 +148,8 @@ end
 
 always @(posedge CLK) begin
     if (cst == SWAP0) begin
-        sequence[i] <= sequence[j];
-        sequence[j] <= sequence[i];
+        seq[i] <= seq[j];
+        seq[j] <= seq[i];
     end
 end
 
@@ -157,40 +157,40 @@ always @(posedge CLK) begin
     if (cst == SWAP1) begin
         case (i)
             0: begin
-                sequence[1] <= sequence[7];
-                sequence[2] <= sequence[6];
-                sequence[3] <= sequence[5];
-                sequence[5] <= sequence[3];
-                sequence[6] <= sequence[2];
-                sequence[7] <= sequence[1];
+                seq[1] <= seq[7];
+                seq[2] <= seq[6];
+                seq[3] <= seq[5];
+                seq[5] <= seq[3];
+                seq[6] <= seq[2];
+                seq[7] <= seq[1];
             end
             1: begin
-                sequence[2] <= sequence[7];
-                sequence[3] <= sequence[6];
-                sequence[4] <= sequence[5];
-                sequence[5] <= sequence[4];
-                sequence[6] <= sequence[3];
-                sequence[7] <= sequence[2];
+                seq[2] <= seq[7];
+                seq[3] <= seq[6];
+                seq[4] <= seq[5];
+                seq[5] <= seq[4];
+                seq[6] <= seq[3];
+                seq[7] <= seq[2];
             end
             2: begin
-                sequence[3] <= sequence[7];
-                sequence[4] <= sequence[6];
-                sequence[6] <= sequence[4];
-                sequence[7] <= sequence[3];
+                seq[3] <= seq[7];
+                seq[4] <= seq[6];
+                seq[6] <= seq[4];
+                seq[7] <= seq[3];
             end
             3: begin
-                sequence[4] <= sequence[7];
-                sequence[5] <= sequence[6];
-                sequence[6] <= sequence[5];
-                sequence[6] <= sequence[4];
+                seq[4] <= seq[7];
+                seq[5] <= seq[6];
+                seq[6] <= seq[5];
+                seq[6] <= seq[4];
             end
             4: begin
-                sequence[5] <= sequence[7];
-                sequence[7] <= sequence[5];
+                seq[5] <= seq[7];
+                seq[7] <= seq[5];
             end
             5: begin
-                sequence[6] <= sequence[7];
-                sequence[7] <= sequence[6];
+                seq[6] <= seq[7];
+                seq[7] <= seq[6];
             end
         endcase
     end

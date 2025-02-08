@@ -55,7 +55,7 @@ always @(*) begin
                 nst = CHECK;
             end
             else begin
-                nst = CAL
+                nst = CALㄤ
             end
         end
         CHECK: begin
@@ -139,7 +139,7 @@ always @(posedge CLK) begin
         W <= W + 1;
         if (seq[W] > seq[i]) begin
             if (seq[W] < Min) begin
-                Min <= seq[W]
+                      Min <= seq[W];
                 j <= W;
             end
         end
@@ -157,7 +157,7 @@ always @(posedge CLK) begin
     if (cst == SWAP1) begin
         case (i)
             0: begin
-                seq[1] <= seq[7];
+                sq[1] <= seq[7];
                 seq[2] <= seq[6];
                 seq[3] <= seq[5];
                 seq[5] <= seq[3];

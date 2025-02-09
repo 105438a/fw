@@ -10,7 +10,7 @@ output reg Valid );
 
 reg [2:0] cst, nst;
 reg [9:0] currentcost;
-reg [2:0] seq [2:0];
+          reg [2:0] seq [7:0];
 reg [2:0] i, j, Min;
 parameter IDLE = 3'd0, 
           CAL = 3'd1, 

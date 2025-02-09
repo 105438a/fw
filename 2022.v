@@ -157,7 +157,7 @@ always @(posedge CLK) begin
     if (cst == SWAP1) begin
         case (i)
             0: begin
-                sq[1] <= seq[7];
+                seq[1] <= seq[7];
                 seq[2] <= seq[6];
                 seq[3] <= seq[5];
                 seq[5] <= seq[3];

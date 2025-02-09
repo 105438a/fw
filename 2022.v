@@ -55,7 +55,7 @@ always @(*) begin
                 nst = CHECK;
             end
             else begin
-                nst = CALㄤ
+                nst = CAL;
             end
         end
         CHECK: begin

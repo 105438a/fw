@@ -1,0 +1,32 @@
+module LED (
+    input   clk ,
+    input   rst ,
+    input   [1:0] sw    ,
+    output  reg     [3:0] led
+);
+    
+reg [1:0] state;
+parameter WHITE = 2'b00, RED = 2'b01, GREEN = 2'b10, YELLOW = 2'b11;
+always @(posedge clk or posedge rst) begin
+    if (rst) begin
+        state <= WHITE;
+    end
+    else
+        case (sw)
+            2'b00: state <= WHITE;
+            2'b01: state <= RED;
+            2'b10: state <= GREEN;
+            2'b11: state <= YELLOW;
+        endcase
+end
+
+always @(*) begin
+    case (state)
+        WHITE: led = 3'b111;
+        RED: led = 3'b100;
+        GREEN: led = 3'b010;
+        YELLOW:  led = 3'b110;
+    endcase
+end
+
+endmodule

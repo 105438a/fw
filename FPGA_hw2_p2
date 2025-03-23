@@ -1,0 +1,347 @@
+module divider(
+  input clk,
+  input rst,
+  output reg clk_div
+);
+
+  reg [25:0] cnt;
+
+  always@(posedge clk or posedge rst) begin
+    if (rst) begin
+      cnt <= 26'd0;
+      clk_div <= 'b0;
+    end
+    else begin
+      if (cnt == 62500000 - 1) cnt <= 26'd0;
+      else cnt <= cnt + 1;
+
+      if (cnt < 31250000) clk_div <= 'b0;
+      else clk_div <= 'b1;
+    end
+  end
+
+endmodule
+
+module top(
+    input   clk   ,
+    input   [1:0] sw  ,
+    input   [3:0] btn
+    output  [3:0] led,
+    output  [2:0] led4, led5,
+    );
+    parameter T1GT2R = 4'd0, T1YT2R = 4'd1, T1RT2R_f = 4'd2, T1RT2G = 4'd3, T1RT2Y = 4'd4, T1RT2R = 4'd5, ONERONEG = 4'd6, ALLY = 4'd7, ALLR = 4'd8, RESET = 4'd9;
+    parameter TIME_default_oneroneg = 3'd5, TIME_default_oneroney = 1'd1, TIME_default_allr = 2'd2;
+    parameter WHITE = 3'b111, RED = 3'd100, GREEN = 3'b010, YELLOW = 3'b110;
+    wire    clk_div ;
+    
+    reg [3:0] TIME_oneroneg, TIME_oneroney, TIME_allr;
+    reg [3:0] cst, nst;
+    reg [3:0] counter;
+    divider div_0(
+    .clk    (clk),
+    .rst    (btn[3]),
+    .clk_div    (clk_div)
+    );
+
+    always @(posedge clk_div or posedge btn[3]) begin
+        if (btn[3]) begin
+            counter <= TIME_default_oneroneg;
+        end
+        else if (sw == 2'b00) begin
+            if (counter == 4'd0) begin
+                case (nst)
+                    T1GT2R: counter <= TIME_oneroneg;
+                    T1YT2R: counter <= TIME_oneroney;
+                    T1RT2R_f: counter <= TIME_allr;
+                    T1RT2G: counter <= TIME_oneroneg;
+                    T1RT2Y: counter <= TIME_oneroney;
+                    T1RT2R: counter <= TIME_allr
+                    default: counter <= TIME_oneroneg;
+                endcase
+            end
+            else begin
+                counter <= counter - 4'd1;
+            end
+        end
+    end
+
+    always @(posedge clk or posedge btn[3]) begin
+        if (btn[3]) begin
+            TIME_oneroneg <= TIME_default_oneroneg;
+            TIME_oneroney <= TIME_default_oneroney;
+            TIME_allr <= TIME_default_allr;
+        end
+        else if (sw == 2'b01) begin
+            if (btn[0]) begin
+                TIME_oneroneg <= TIME_default_oneroneg;
+            end
+            else if (btn[1]) begin
+                if (TIME_oneroneg == 4'd15) begin
+                    TIME_oneroneg <= TIME_oneroneg;
+                end
+                else TIME_oneroneg <= TIME_oneroneg + 4'd1;
+            end
+            else if (btn[2]) begin
+                 if(TIME_oneroneg == 4'd1) begin
+                    TIME_oneroneg <= TIME_oneroneg;
+                 end;
+                 else TIME_oneroneg <= TIME_oneroneg - 4'd1;
+            end
+        end
+        else if (sw == 2'b10) begin
+            if (btn[0]) begin
+                TIME_oneroney <= TIME_default_oneroney;
+            end
+            else if (btn[1]) begin
+                if (TIME_oneroney == 4'd15) begin
+                    TIME_oneroney <= TIME_oneroney;
+                end
+                else TIME_oneroney <= TIME_oneroney + 4'd1;
+            end
+            else if (btn[2]) begin
+                 if(TIME_oneroney == 4'd1) begin
+                    TIME_oneroney <= TIME_oneroney;
+                 end;
+                 else TIME_oneroney <= TIME_oneroney - 4'd1;
+            end
+        end
+        else if (sw == 2'b11) begin
+            if (btn[0]) begin
+                TIME_allr <= TIME_default_allr;
+            end
+            else if (btn[1]) begin
+                if (TIME_allr == 4'd15) begin
+                    TIME_allr <= TIME_allr;
+                end
+                else TIME_allr <= TIME_allr + 4'd1;
+            end
+            else if (btn[2]) begin
+                 if(TIME_allr == 4'd1) begin
+                    TIME_allr <= TIME_allr;
+                 end;
+                 else TIME_allr <= TIME_allr - 4'd1;
+            end
+        end
+    end
+
+    always @(*) begin
+        if(btn[3]) begin
+            led = 4'b0000;
+        end
+        else begin
+            case (sw)
+                2'b00: led = counter;
+                2'b01: led = TIME_oneroneg;
+                2'b10: led = TIME_oneroney;
+                2'b11: led = TIME_allr;
+                default: led = 4'b0000;
+            endcase
+        end
+    end
+
+    always @(*) begin
+        case (cst)
+            T1GT2R:begin
+                led4 = GREEN;
+                led5 = RED; 
+            end
+            T1YT2R:begin
+                led4 = YELLOW;
+                led5 = RED; 
+            end
+            T1RT2R_f:begin
+                led4 = RED;
+                led5 = RED; 
+            end
+            T1RT2G:begin
+                led4 = RED;
+                led5 = GREEN; 
+            end
+            T1RT2Y:begin
+                led4 = RED;
+                led5 = YELLOW; 
+            end
+            T1RT2R:begin
+                led4 = RED;
+                led5 = RED; 
+            end
+            ONERONEG:begin
+                led4 = RED;
+                led5 = GREEN; 
+            end
+            ALLY:begin
+                led4 = YELLOW;
+                led5 = YELLOW; 
+            end
+            ALLR:begin
+                led4 = RED;
+                led5 = RED; 
+            end
+            RESET:begin
+                led4 = WHITE;
+                led5 = WHITE; 
+            end
+            default:begin
+                led4 = WHITE;
+                led5 = WHITE; 
+            end
+        endcase
+    end
+
+    always @(*) begin
+        case (cst)
+            T1GT2R:begin
+                if (sw == 2'b01) begin
+                    nst = ONERONEG;
+                end
+                else if (sw == 2'b10) begin
+                    nst = ALLY;
+                end
+                else if (sw == 2'b11) begin
+                    nst = ALLR;
+                end
+                else begin
+                    if (counter == 4'd0;) begin
+                        nst = T1YT2R;
+                    end
+                    else
+                        nst = T1GT2R; 
+                end
+            end
+            T1YT2R:begin
+                if (sw == 2'b01) begin
+                    nst = ONERONEG;
+                end
+                else if (sw == 2'b10) begin
+                    nst = ALLY;
+                end
+                else if (sw == 2'b11) begin
+                    nst = ALLR;
+                end
+                else begin
+                    if (counter == 4'd0) begin
+                        nst = T1YT2R_f;
+                    end
+                    else
+                        nst = T1YT2R; 
+                end
+            end
+            T1RT2R_f:begin
+                if (sw == 2'b01) begin
+                    nst = ONERONEG;
+                end
+                else if (sw == 2'b10) begin
+                    nst = ALLY;
+                end
+                else if (sw == 2'b11) begin
+                    nst = ALLR;
+                end
+                else begin
+                    if (counter == 4'd0) begin
+                        nst = T1RT2G;
+                    end
+                    else
+                        nst = T1RT2R_f; 
+                end
+            end
+            T1RT2G:begin
+                if (sw == 2'b01) begin
+                    nst = ONERONEG;
+                end
+                else if (sw == 2'b10) begin
+                    nst = ALLY;
+                end
+                else if (sw == 2'b11) begin
+                    nst = ALLR;
+                end
+                else begin
+                    if (counter == 4'd0) begin
+                        nst = T1RT2Y;
+                    end
+                    else
+                        nst = T1RT2G; 
+                end
+            end
+            T1RT2Y:begin
+                if (sw == 2'b01) begin
+                    nst = ONERONEG;
+                end
+                else if (sw == 2'b10) begin
+                    nst = ALLY;
+                end
+                else if (sw == 2'b11) begin
+                    nst = ALLR;
+                end
+                else begin
+                    if (counter == 4'd0) begin
+                        nst = T1RT2R;
+                    end
+                    else
+                        nst = T1RT2Y; 
+                end
+            end
+            T1RT2R:begin
+                if (sw == 2'b01) begin
+                    nst = ONERONEG;
+                end
+                else if (sw == 2'b10) begin
+                    nst = ALLY;
+                end
+                else if (sw == 2'b11) begin
+                    nst = ALLR;
+                end
+                else begin
+                    if (counter == 4'd0) begin
+                        nst = T1GT2R;
+                    end
+                    else
+                        nst = T1RT2R; 
+                end
+            end
+            ONERONEG:begin
+                if (sw == 2'b00) begin
+                    nst = T1GT2R;
+                end
+                else if (sw == 2'b10) begin
+                    nst = ALLY;
+                end
+                else if (sw == 2'b11) begin
+                    nst = ALLR;
+                end
+            end
+            ALLY:begin
+                if (sw == 2'b00) begin
+                    nst = T1GT2R;
+                end
+                else if (sw == 2'b01) begin
+                    nst = ONERONEG;
+                end
+                else if (sw == 2'b11) begin
+                    nst = ALLR;
+                end
+            end
+            ALLR:begin
+                if (sw == 2'b00) begin
+                    nst = T1GT2R;
+                end
+                else if (sw == 2'b01) begin
+                    nst = ALLY;
+                end
+                else if (sw == 2'b10) begin
+                    nst = ALLY;
+                end
+            end
+            RESET:begin
+                if (sw == 2'b00) begin
+                    nst = T1GT2R;
+                end
+                else begin
+                    nst = RESET;
+                end
+            end
+            default: nst = RESET;
+        endcase
+    end
+    
+    
+endmodule

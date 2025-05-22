@@ -1,0 +1,102 @@
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+
+def preprocess_df(df, config):
+    """
+    通用預處理函式，可處理不同結構但符合 config 規範的 DataFrame。
+    config 範例：
+    {
+      "time_col": "time",
+      "drop_cols": [...],
+      "outlier_cols": [...],
+      "sequence_cols": [...],
+      "window_size": 30,
+      "train_ratio": 0.8
+    }
+    """
+    # 1. 時間欄位轉 datetime，並衍生年/月
+    df[config["time_col"]] = pd.to_datetime(df[config["time_col"]])
+    df["year"]  = df[config["time_col"]].dt.year
+    df["month"] = df[config["time_col"]].dt.month
+
+    # 2. 0 值補平均
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    for col in numeric_cols:
+        mean_val = df.loc[df[col] != 0, col].mean()
+        df[col] = df[col].replace(0, mean_val)
+
+    # 3. IQR 離群偵測 & 移除
+    cols = config["outlier_cols"]
+    Q1 = df[cols].quantile(0.25)
+    Q3 = df[cols].quantile(0.75)
+    IQR = Q3 - Q1
+    mask = ~((df[cols] < (Q1 - 1.5 * IQR)) | (df[cols] > (Q3 + 1.5 * IQR))).any(axis=1)
+    df = df[mask].reset_index(drop=True)
+
+    # 4. 刪除不需要欄位
+    df = df.drop(columns=config["drop_cols"], errors="ignore")
+
+    # 5. 正規化所有數值欄位
+    scaler = MinMaxScaler()
+    df[numeric_cols] = scaler.fit_transform(df[numeric_cols])
+
+    # 6. 產生滑窗序列
+    seq_data = np.stack([df[c].values for c in config["sequence_cols"]], axis=1)
+    seqs = []
+    w = config["window_size"]
+    for i in range(len(seq_data) - w + 1):
+        seqs.append(seq_data[i : i + w])
+    seqs = np.array(seqs)
+
+    # 7. 切分訓練/測試
+    n_train = int(len(seqs) * config["train_ratio"])
+    train_seqs = seqs[:n_train]
+    test_seqs  = seqs[n_train:]
+
+    return df, train_seqs, test_seqs
+
+# === 使用範例 ===
+if __name__ == "__main__":
+    # 多個不同資料集的設定都放在這裡
+    configs = [
+        {
+          "file_path": "Weather_Dataset.csv",
+          "time_col": "time",
+          "drop_cols": ["sunrise","sunset","country","city","weathercode"],
+          "outlier_cols": [
+            "rain_sum","precipitation_sum","temperature_2m_max","temperature_2m_min",
+            "windspeed_10m_max","windgusts_10m_max"
+          ],
+          "sequence_cols": ["rain_sum"],  
+          "window_size": 30,
+          "train_ratio": 0.8
+        },
+        {
+          "file_path": "OtherData.xlsx",
+          "time_col": "timestamp",
+          "drop_cols": ["irrelevant_col"],
+          "outlier_cols": ["featureA","featureB"],
+          "sequence_cols": ["featureA","featureB"],
+          "window_size": 14,
+          "train_ratio": 0.7
+        },
+        # 可以再加入更多 dataset config
+    ]
+
+    for cfg in configs:
+        # 讀檔
+        if cfg["file_path"].endswith(".csv"):
+            df = pd.read_csv(cfg["file_path"])
+        else:
+            df = pd.read_excel(cfg["file_path"])
+        
+        # 預處理
+        df_clean, train_seqs, test_seqs = preprocess_df(df, cfg)
+
+        # 輸出
+        out_prefix = cfg["file_path"].split(".")[0]
+        df_clean.to_csv(f"{out_prefix}_clean.csv", index=False)
+        np.save(f"{out_prefix}_train.npy", train_seqs)
+        np.save(f"{out_prefix}_test.npy", test_seqs)
+

@@ -1,0 +1,32 @@
+void setup() {
+  Serial.begin(115200);   // USB to PC
+  Serial1.begin(9600);    // UART1 (RX1: 19, TX1: 18)
+  Serial2.begin(9600);    // UART2 (RX2: 17, TX2: 16)
+  Serial3.begin(9600);    // UART3 (RX3: 15, TX3: 14)
+
+  Serial.println("UART 三路接收啟動 (1 byte 模式)");
+}
+
+void loop() {
+  // UART1
+  
+  if (Serial1.available() >= 1) { //至少有 1 byte         
+    int val = Serial1.read();   // 讀1byte
+    Serial.print("[S1] ");      // 標記來源
+    Serial.println(val);        // 輸出數值
+  }
+
+  // UART2
+  if (Serial2.available() >= 1) {
+    int val = Serial2.read();
+    Serial.print("[S2] ");
+    Serial.println(val);
+  }
+
+  // UART3
+  if (Serial3.available() >= 1) {
+    int val = Serial3.read();
+    Serial.print("[S3] ");
+    Serial.println(val);
+  }
+}

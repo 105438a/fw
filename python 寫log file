@@ -1,0 +1,16 @@
+import serial
+from datetime import datetime
+
+ser = serial.Serial('COM3', 115200, timeout=1)
+
+with open("uart_log.csv", "a") as f:
+    while True:
+        try:
+            line = ser.readline().decode(errors='ignore').strip()
+            if line:
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                f.write(f"{timestamp},{line}\n")
+                print(timestamp, line)
+        except KeyboardInterrupt:
+            print("結束接收")
+            break

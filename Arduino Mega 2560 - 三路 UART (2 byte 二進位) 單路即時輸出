@@ -1,0 +1,39 @@
+//第一個 byte 為高位，第二個 byte 為低位
+
+void setup() {
+  Serial.begin(115200);   // USB to PC
+  Serial1.begin(9600);    // UART1 
+  Serial2.begin(9600);    // UART2 
+  Serial3.begin(9600);    // UART3
+
+  Serial.println("UART 三路接收啟動 (2 Bytes)");
+}
+
+void loop() {
+  // UART1
+  if (Serial1.available() >= 2) { //至少有2Byte
+    uint16_t value = readTwoBytesBigEndian(Serial1);
+    Serial.print("[S1] ");
+    Serial.println(value);
+  }
+
+  // UART2
+  if (Serial2.available() >= 2) {
+    uint16_t value = readTwoBytesBigEndian(Serial2);
+    Serial.print("[S2] ");
+    Serial.println(value);
+  }
+
+  // UART3
+  if (Serial3.available() >= 2) {
+    uint16_t value = readTwoBytesBigEndian(Serial3);
+    Serial.print("[S3] ");
+    Serial.println(value);
+  }
+}
+
+uint16_t readTwoBytesBigEndian(HardwareSerial &port) {
+  byte highByte = port.read();  // 高位 8bits
+  byte lowByte  = port.read();  // 低位 8bits
+  return ((uint16_t)highByte << 8) | lowByte;
+}

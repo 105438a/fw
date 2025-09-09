@@ -1,0 +1,134 @@
+/*
+  Mega 2560 — 三路 UART，每行四個浮點數；NI風格：8Hz輸出 + 125ms 逾時分段
+  - 行分段：遇終止字元(LF/CRLF)；若沒有，125ms 逾時也結束一筆
+  - 輸出節流：最多 8 次/秒（每路各自獨立）
+  - 解析：用 strtod（在 AVR 上比 sscanf %f 更穩）
+*/
+
+#include <string.h>
+#include <ctype.h>
+#include <stdlib.h>
+
+const unsigned long BAUD_USB   = 115200;   // 串口監視器
+const unsigned long BAUD_UART  = 115200;   // 儀器鮑率(如 9600/115200)
+const char TERM = '\n';                     // 主要終止字元 LF
+const bool ACCEPT_CR = true;                // true 可同時接受 CR（CRLF 相容）
+
+// —— NI-like 參數 —— //
+const unsigned NI_HZ = 8;                                  // 一秒 8 次
+const unsigned long EMIT_PERIOD_MS = 1000UL / NI_HZ;       // 125ms
+const unsigned long LINE_TIMEOUT_MS = 125;                 // 125ms 逾時視為一筆
+
+const size_t BUF_LEN = 128;   // 單行最大長度(保留1字元給 '\0')
+
+struct UartIn {
+  HardwareSerial* sp;
+  char buf[BUF_LEN];
+  size_t idx;
+  const char* tag;
+
+  // 行分段/輸出控制
+  unsigned long lastRx = 0;      // 最後收到任何字元的時間
+  unsigned long lastEmit = 0;    // 最後一次顯示時間
+  bool hasNew = false;           // 是否有新解好的數以待輸出
+  float a, b, c, d;              // 最近一次成功解析的 4 個數
+} uarts[] = {
+  { &Serial1, "", 0, "S1" },
+  { &Serial2, "", 0, "S2" },
+  { &Serial3, "", 0, "S3" },
+};
+
+// —— 小工具：去尾空白 —— //
+void trimTail(char *s) {
+  int n = strlen(s);
+  while (n > 0 && isspace((unsigned char)s[n-1])) s[--n] = '\0';
+}
+
+// —— 解析一行：用 strtod 逐個抓 4 個浮點 —— //
+bool decode4f_strtod(const char* s, float &a, float &b, float &c, float &d) {
+  const char* p = s; char* end = nullptr;
+  a = (float)strtod(p, &end); if (end == p) return false; p = end;
+  b = (float)strtod(p, &end); if (end == p) return false; p = end;
+  c = (float)strtod(p, &end); if (end == p) return false; p = end;
+  d = (float)strtod(p, &end); if (end == p) return false;
+  return true;
+}
+
+// —— 當前 UART 緩衝湊成一行（終止字元或逾時觸發）就呼叫 —— //
+void handleLine(UartIn &u) {
+  u.buf[u.idx] = '\0';    // 補 C 字串結尾
+  trimTail(u.buf);
+
+  float aa, bb, cc, dd;
+  if (decode4f_strtod(u.buf, aa, bb, cc, dd)) {
+    // 成功解析 → 記為「最新值」並標記待輸出
+    u.a = aa; u.b = bb; u.c = cc; u.d = dd;
+    u.hasNew = true;
+  } else {
+    Serial.print('['); Serial.print(u.tag); Serial.print("] Parse fail: ");
+    Serial.println(u.buf);
+  }
+}
+
+// —— 把目前 RX buffer 內的所有字元吃掉，用終止字元做行分段 —— //
+void processPort(UartIn &u) {
+  while (u.sp->available()) {
+    char c = u.sp->read();
+    u.lastRx = millis();
+
+    bool isTerm = (c == TERM) || (ACCEPT_CR && c == '\r');
+    if (isTerm) {
+      if (u.idx > 0) handleLine(u);
+      u.idx = 0;                // 重置（CRLF 的第二個字元會被忽略）
+      continue;
+    }
+
+    if (u.idx < BUF_LEN - 1) u.buf[u.idx++] = c;
+    else {
+      // 行太長：直接結束這一行試著解析（防止永遠累積）
+      handleLine(u);
+      u.idx = 0;
+    }
+  }
+}
+
+// —— 若超過 LINE_TIMEOUT_MS 還沒遇到行尾，也把目前內容當一行 —— //
+void maybeTimeoutFlush(UartIn &u) {
+  if (u.idx > 0 && (millis() - u.lastRx) > LINE_TIMEOUT_MS) {
+    handleLine(u);
+    u.idx = 0;
+  }
+}
+
+// —— 以 8Hz 的節拍輸出最新值（就算中間來了多行，也只顯示最新的一筆） —— //
+void maybeEmit(UartIn &u) {
+  unsigned long now = millis();
+  if (u.hasNew && (now - u.lastEmit) >= EMIT_PERIOD_MS) {
+    Serial.print('['); Serial.print(u.tag); Serial.print(" @"); Serial.print(now); Serial.print("ms] ");
+    Serial.print(u.a, 6); Serial.print(' ');
+    Serial.print(u.b, 6); Serial.print(' ');
+    Serial.print(u.c, 6); Serial.print(' ');
+    Serial.println(u.d, 6);
+    u.lastEmit = now;
+    u.hasNew = false;
+  }
+}
+
+void setup() {
+  Serial.begin(BAUD_USB);
+  Serial1.begin(BAUD_UART);
+  Serial2.begin(BAUD_UART);
+  Serial3.begin(BAUD_UART);
+  Serial.println(F("Start: 3xUART, line by terminator or 125ms timeout; emit at 8Hz"));
+}
+
+void loop() {
+  // 先把當前可讀的 bytes 都吃掉（終止字元決定行分段）
+  for (UartIn &u : uarts) processPort(u);
+
+  // 沒等到行尾也別卡住：逾時視為一行（模擬 VISA timeout）
+  for (UartIn &u : uarts) maybeTimeoutFlush(u);
+
+  // NI 風格：每路各自 8Hz 輸出最新值
+  for (UartIn &u : uarts) maybeEmit(u);
+}

@@ -1,0 +1,98 @@
+/*
+  Mega 2560 — 連續讀三個不同 TX（Serial1/2/3）
+  資料格式：每行 4 個浮點數，空白分隔；以終止字元收尾（LF 或 CRLF）
+  行為：讀到終止字元才視為一筆；解析後立刻在 Serial Monitor 顯示
+
+  接線：
+    裝置1 TX -> Mega RX1(19)   
+    裝置2 TX -> Mega RX2(17)   
+    裝置3 TX -> Mega RX3(15)   
+*/
+
+#include <string.h>
+#include <stdio.h>
+
+const unsigned long BAUD_USB  = 115200;   // 串口監視器速率
+const unsigned long BAUD_UART = 115200;   // 三路裝置鮑率（你的儀器若是 9600 就改 9600）
+
+// 終止字元（像 NI 的 TermChar）
+const char TERM = '\n';       // 常見 LF
+const bool ACCEPT_CR = true;  // 若裝置送 CRLF，打開這個
+
+const size_t BUF_LEN = 96;    // 單行最大字元數，依資料長度調整
+
+struct UartIn {
+  HardwareSerial* sp;
+  char buf[BUF_LEN];
+  size_t idx;
+  const char* tag;
+} uarts[] = {
+  { &Serial1, "", 0, "S1" },
+  { &Serial2, "", 0, "S2" },
+  { &Serial3, "", 0, "S3" },
+};
+
+void setup() {
+  Serial.begin(BAUD_USB);
+  Serial1.begin(BAUD_UART);
+  Serial2.begin(BAUD_UART);
+  Serial3.begin(BAUD_UART);
+
+  Serial.println(F("Start: read-until-terminator on Serial1/2/3; decode 4 floats each line"));
+}
+
+void loop() {
+  // 連續輪詢三個 UART，非阻塞同時讀
+  for (UartIn &u : uarts) {
+    processPort(u);
+  }
+}
+
+// 讀到終止字元才結束一行，並解析為 4 個 float
+void processPort(UartIn &u) {
+  while (u.sp->available()) {
+    char c = u.sp->read();
+    bool isTerm = (c == TERM) || (ACCEPT_CR && c == '\r');
+
+    if (isTerm) {
+      if (u.idx > 0) {
+        handleLine(u);
+        u.idx = 0;                      // 清空準備下一筆
+      }
+      continue;                         // CRLF 的第二個字元會被忽略
+    }
+
+    if (u.idx < BUF_LEN - 1) {
+      u.buf[u.idx++] = c;               // 累積字元到行緩衝
+    } else {
+      u.idx = 0;                        // 超長防護：丟棄本行
+    }
+  }
+}
+
+// 解析 u.buf（四個浮點），並印到 Serial Monitor
+void handleLine(UartIn &u) {
+  u.buf[u.idx] = '\0';
+  trimTail(u.buf);
+
+  float a,b,c,d;
+  // 用 sscanf 將 ASCII 一行解成 4 個浮點（等價 NI 的 Scan From String）
+  if (sscanf(u.buf, " %f %f %f %f ", &a,&b,&c,&d) == 4) {
+    unsigned long ms = millis();
+    Serial.print('['); Serial.print(u.tag); Serial.print(" @"); Serial.print(ms); Serial.print("ms] ");
+    Serial.print(a,6); Serial.print(' ');
+    Serial.print(b,6); Serial.print(' ');
+    Serial.print(c,6); Serial.print(' ');
+    Serial.println(d,6);
+  } else {
+    Serial.print('['); Serial.print(u.tag); Serial.print("] Parse fail: ");
+    Serial.println(u.buf);
+  }
+}
+
+// 去尾空白/換行
+void trimTail(char *s) {
+  int n = strlen(s);
+  while (n > 0 && (s[n-1] == '\r' || s[n-1] == '\n' || s[n-1] == ' ' || s[n-1] == '\t'))
+    s[--n] = '\0';
+}

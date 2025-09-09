@@ -1,0 +1,136 @@
+/*
+  Mega 2560 — 3xUART 逐行轉送到 USB（每行加來源標籤；無逾時切行）
+  輸出格式：TAG,arduino_millis,payload
+  例：S1,123456,-119.217,-99.405,-33.858,-33.143
+
+  接線（TTL；若是 RS-232/485 請加 MAX3232/MAX485，且共地）：
+    裝置1 TX -> RX1(19)
+    裝置2 TX -> RX2(17)
+    裝置3 TX -> RX3(15)
+*/
+
+#include <string.h>
+#include <ctype.h>
+
+const unsigned long BAUD_USB  = 115200;
+const unsigned long BAUD_UART = 115200;
+// 若某一路為 7E1：把那一路改成 SerialX.begin(BAUD_UART, SERIAL_7E1);
+
+const bool    ACCEPT_LF = true;
+const bool    ACCEPT_CR = true;
+const bool    ACCEPT_FS = true;     // 如設備用 0x1C 當行尾
+const uint8_t TERM_FS   = 0x1C;
+
+#define BUF_LEN 256   // 用巨集，兼容較舊編譯器
+
+struct UartIn {
+  HardwareSerial* sp;
+  char   buf[BUF_LEN];
+  uint16_t idx;
+  const char* tag;
+  bool   droppingOverlong;
+  // 統計
+  unsigned long bytesCnt;
+  unsigned long linesCnt;
+};
+
+// 用函式初始化，避免聚合初始化踩雷
+static void initUart(UartIn &u, HardwareSerial &port, const char* tag) {
+  u.sp = &port;
+  memset(u.buf, 0, sizeof(u.buf));
+  u.idx = 0;
+  u.tag = tag;
+  u.droppingOverlong = false;
+  u.bytesCnt = 0;
+  u.linesCnt = 0;
+}
+
+inline bool isTerm(uint8_t c) {
+  if (ACCEPT_LF && c == '\n') return true;
+  if (ACCEPT_CR && c == '\r') return true;
+  if (ACCEPT_FS && c == TERM_FS) return true;
+  return false;
+}
+
+static void trimTail(char *s) {
+  int n = strlen(s);
+  while (n > 0 && isspace((unsigned char)s[n-1])) s[--n] = '\0';
+}
+
+static void handleLine(UartIn &u) {
+  u.buf[u.idx] = '\0';
+  trimTail(u.buf);
+  u.linesCnt++;
+  // 丟到 USB：TAG,arduino_millis,payload
+  Serial.print(u.tag);
+  Serial.print(',');
+  Serial.print(millis());
+  Serial.print(',');
+  Serial.println(u.buf);
+}
+
+static void processPort(UartIn &u) {
+  while (u.sp->available()) {
+    uint8_t ch = (uint8_t)u.sp->read();
+    u.bytesCnt++;
+
+    if (u.droppingOverlong) {                 // 丟到行尾再同步
+      if (isTerm(ch)) { u.droppingOverlong = false; u.idx = 0; }
+      continue;
+    }
+
+    if (isTerm(ch)) {                         // 完成一行（遇到終止字元）
+      if (u.idx > 0) handleLine(u);
+      u.idx = 0;
+      continue;
+    }
+
+    if (u.idx < BUF_LEN - 1) {
+      u.buf[u.idx++] = (char)ch;
+    } else {
+      u.droppingOverlong = true;              // 行太長，丟到行尾
+      u.idx = 0;
+    }
+  }
+}
+
+// 三個埠物件與指標陣列
+UartIn u1, u2, u3;
+UartIn* uarts[3] = { &u1, &u2, &u3 };
+
+// 每秒印一次統計（需要乾淨輸出就註解掉 printStats();）
+unsigned long lastStats = 0;
+static void printStats() {
+  unsigned long now = millis();
+  if (now - lastStats >= 1000) {
+    lastStats = now;
+    Serial.print(F("[stats] "));
+    for (int i=0;i<3;i++){
+      Serial.print(uarts[i]->tag);
+      Serial.print(F(" bytes=")); Serial.print(uarts[i]->bytesCnt);
+      Serial.print(F(" lines=")); Serial.print(uarts[i]->linesCnt);
+      if (i<2) Serial.print(F(" | "));
+      uarts[i]->bytesCnt = 0;
+      uarts[i]->linesCnt = 0;
+    }
+    Serial.println();
+  }
+}
+
+void setup() {
+  Serial.begin(BAUD_USB);
+  Serial1.begin(BAUD_UART);  // 若 S1 為 7E1：Serial1.begin(BAUD_UART, SERIAL_7E1);
+  Serial2.begin(BAUD_UART);
+  Serial3.begin(BAUD_UART);
+
+  initUart(u1, Serial1, "S1");
+  initUart(u2, Serial2, "S2");
+  initUart(u3, Serial3, "S3");
+
+  Serial.println(F("Start: 3xUART -> USB (TAG,ms,payload)"));
+}
+
+void loop() {
+  for (int i=0;i<3;i++) processPort(*uarts[i]);
+  printStats();   // 不想要統計就註解這行
+}

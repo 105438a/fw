@@ -1,0 +1,111 @@
+# pc_logger_split_txt.py
+# pip install pyserial
+import serial, datetime, os, time, argparse, sys
+
+PORT = "COM9"   # ← 你的 Arduino 串口
+BAUD = 115200   # ← 與 Arduino Serial.begin(...) 一致
+OUT_DIR = os.path.join(os.path.expanduser("~"), "Desktop", "arduino_data")
+
+EOLS   = b"\n\r\x1c"     # 同時接受 LF, CR, 0x1C
+SPACER = "\n\n\n"        # 每筆之間多空 3 行
+
+LOG_FILENAMES = ["S1_log.txt", "S2_log.txt", "S3_log.txt", "all_log.txt", "stats_log.txt"]
+
+def now_str():
+    return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+
+def prepare_logs(clear: bool):
+    os.makedirs(OUT_DIR, exist_ok=True)
+    if clear:
+        for name in LOG_FILENAMES:
+            path = os.path.join(OUT_DIR, name)
+            with open(path, "w", encoding="utf-8") as _:
+                pass
+            print("Cleared:", os.path.abspath(path))
+
+def open_txt(name):
+    path = os.path.join(OUT_DIR, name)
+    f = open(path, "a", encoding="utf-8", buffering=1)  # 行緩衝
+    print("Writing to:", os.path.abspath(path))
+    return f
+
+def is_data_line(line: str) -> bool:
+    return line.startswith("S1,") or line.startswith("S2,") or line.startswith("S3,")
+
+def main(clear_old: bool):
+    prepare_logs(clear=clear_old)
+
+    with serial.Serial(PORT, BAUD, timeout=1) as ser, \
+         open_txt("S1_log.txt") as f1, \
+         open_txt("S2_log.txt") as f2, \
+         open_txt("S3_log.txt") as f3, \
+         open_txt("all_log.txt") as fall, \
+         open_txt("stats_log.txt") as fstats:
+
+        print(f"[info] Open {PORT} @ {BAUD}. Logging to {os.path.abspath(OUT_DIR)}")
+        ser.reset_input_buffer()
+
+        tag_map = {"S1": f1, "S2": f2, "S3": f3}
+        buf = bytearray()
+        last_any_byte = time.time()
+
+        while True:
+            chunk = ser.read(1024)  # timeout=1s，所以最多等 1 秒
+            if chunk:
+                last_any_byte = time.time()
+                buf.extend(chunk)
+
+                # 逐一找行尾（支援 \n / \r / 0x1C）
+                while True:
+                    idxs = [buf.find(eol) for eol in EOLS]
+                    idxs = [i for i in idxs if i != -1]
+                    if not idxs:
+                        break
+                    cut = min(idxs)
+                    line_bytes = bytes(buf[:cut])   # 不含行尾
+                    del buf[:cut+1]                 # 連同行尾丟掉
+
+                    raw = line_bytes.decode(errors="ignore").strip()
+                    if not raw:
+                        continue
+
+                    ts = now_str()
+
+                    # 資料行：S1/S2/S3,ms,payload → 寫 data 檔
+                    if is_data_line(raw):
+                        parts = raw.split(",", 2)
+                        if len(parts) == 3:
+                            tag = parts[0].strip()
+                            ms  = parts[1].strip()
+                            payload = parts[2].strip()
+                            row = f"{ts} {tag} {ms} {payload}\n{SPACER}"
+                            fall.write(row)
+                            f = tag_map.get(tag.upper())
+                            if f:
+                                f.write(row)
+                        else:
+                            # 破格式（雖以 Sx, 開頭），視為非資料行 → stats
+                            fstats.write(f"{ts} {raw}\n{SPACER}")
+                        continue
+
+                    # 非資料行（例如 [stats]...、Start:...） → stats_log.txt
+                    fstats.write(f"{ts} {raw}\n{SPACER}")
+
+            # 5 秒沒有任何 byte，提示你檢查
+            if time.time() - last_any_byte > 5:
+                print("[warn] 5s no data. Check: COM port correct? Serial Monitor closed? Baud match? Arduino printing?")
+                last_any_byte = time.time()
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description="Split Arduino logs to txt (S1/S2/S3/all; stats separated).")
+    ap.add_argument("--clear", action="store_true", help="start by clearing old log files")
+
+    # ✅ 關鍵：在 Jupyter 會帶入 -f 參數，所以用 parse_known_args() 忽略不相干參數
+    args, unknown = ap.parse_known_args()
+    if unknown:
+        print("[info] ignored extra args:", unknown)
+
+    try:
+        main(clear_old=args.clear)
+    except KeyboardInterrupt:
+        print("\n[info] stopped by user")

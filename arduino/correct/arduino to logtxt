@@ -33,7 +33,8 @@ def is_data_line(line: str) -> bool:
     return line.startswith("S1,") or line.startswith("S2,") or line.startswith("S3,")
 
 def main(clear_old: bool):
-    prepare_logs(clear=clear_old)
+    # 
+    # prepare_logs(clear=clear_old) 清空log file 選用
 
     with serial.Serial(PORT, BAUD, timeout=1) as ser, \
          open_txt("S1_log.txt") as f1, \
